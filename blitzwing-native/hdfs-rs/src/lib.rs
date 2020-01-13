@@ -14,6 +14,6 @@ pub mod config;
 pub mod error;
 pub mod fs;
 pub mod hadoop_proto;
-pub mod rpc;
 pub mod hdfs;
+pub mod rpc;
 pub mod rt;

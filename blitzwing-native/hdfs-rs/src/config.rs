@@ -1,5 +1,5 @@
+use crate::error::HdfsLibError;
 use crate::error::Result;
-use crate::error::{HdfsLibError};
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -18,10 +18,10 @@ pub struct Configuration {
 impl Configuration {
     pub fn new() -> Self {
         Self {
-            data: HashMap::new()
+            data: HashMap::new(),
         }
     }
-    
+
     pub fn get<T>(&self, key: &str) -> Result<Option<T>>
     where
         T: FromStr,
@@ -35,5 +35,3 @@ impl Configuration {
 }
 
 pub type ConfigRef = Arc<Configuration>;
-
-

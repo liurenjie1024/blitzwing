@@ -1,8 +1,7 @@
+use crate::error::{HdfsLibError, Result};
 use crate::fs::path::{FsPath, FsPathBuilder};
 use crate::hadoop_proto::hdfs::{HdfsFileStatusProto, HdfsFileStatusProto_FileType};
-use crate::error::{HdfsLibError, Result};
 use std::convert::TryFrom;
-
 
 #[derive(Debug, Clone)]
 pub enum FileStatus {
@@ -31,7 +30,7 @@ pub struct FileInfo {
 #[derive(Debug, Clone)]
 pub struct DirInfo {
     path: FsPath,
-    file_stat: FileStat
+    file_stat: FileStat,
 }
 
 #[derive(Debug)]
@@ -42,16 +41,14 @@ pub struct BuildArgs<'a> {
 }
 
 impl<'a> BuildArgs<'a> {
-    pub fn new(proto: &'a HdfsFileStatusProto,
-               base_uri: &'a FsPath,
-               parent_path: &'a str) -> Self {
+    pub fn new(proto: &'a HdfsFileStatusProto, base_uri: &'a FsPath, parent_path: &'a str) -> Self {
         Self {
             proto,
             base_uri,
-            parent_path
+            parent_path,
         }
     }
-    
+
     fn build_full_path(&self) -> Result<FsPath> {
         FsPathBuilder::new(self.base_uri.as_str())
             .and_then(|b| b.append(self.parent_path))
@@ -60,23 +57,22 @@ impl<'a> BuildArgs<'a> {
     }
 }
 
-
 impl<'a> TryFrom<BuildArgs<'a>> for FileStatus {
     type Error = HdfsLibError;
-    
+
     fn try_from(args: BuildArgs<'a>) -> Result<Self> {
         debug!("file status: {:?}", args);
         Ok(match args.proto.get_fileType() {
             HdfsFileStatusProto_FileType::IS_FILE => FileStatus::Dir(DirInfo::try_from(args)?),
             HdfsFileStatusProto_FileType::IS_DIR => FileStatus::File(FileInfo::try_from(args)?),
-            _ => unimplemented!()
+            _ => unimplemented!(),
         })
     }
 }
 
 impl<'a> TryFrom<BuildArgs<'a>> for FileInfo {
     type Error = HdfsLibError;
-    
+
     fn try_from(value: BuildArgs<'a>) -> Result<Self> {
         Ok(FileInfo {
             path: value.build_full_path()?,
@@ -90,7 +86,7 @@ impl<'a> TryFrom<BuildArgs<'a>> for FileInfo {
 
 impl<'a> TryFrom<BuildArgs<'a>> for DirInfo {
     type Error = HdfsLibError;
-    
+
     fn try_from(value: BuildArgs<'a>) -> Result<Self> {
         Ok(DirInfo {
             path: value.build_full_path()?,
@@ -101,14 +97,13 @@ impl<'a> TryFrom<BuildArgs<'a>> for DirInfo {
 
 impl<'a> TryFrom<BuildArgs<'a>> for FileStat {
     type Error = HdfsLibError;
-    
+
     fn try_from(value: BuildArgs<'a>) -> Result<Self> {
         Ok(FileStat {
             modification_time: value.proto.get_modification_time() as i64,
             access_time: value.proto.get_access_time(),
             owner: value.proto.get_owner().to_string(),
-            group: value.proto.get_group().to_string()
+            group: value.proto.get_group().to_string(),
         })
     }
 }
-

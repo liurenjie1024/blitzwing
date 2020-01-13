@@ -1,8 +1,8 @@
+use crate::error::HdfsLibErrorKind::ProtobufError;
 use crate::error::{HdfsLibErrorKind, Result};
 use failure::ResultExt;
-use protobuf::{Message, CodedInputStream};
+use protobuf::{CodedInputStream, Message};
 use std::io::Write;
-use crate::error::HdfsLibErrorKind::ProtobufError;
 use std::ops::Deref;
 
 pub trait RpcMessageSerialize {
@@ -22,8 +22,7 @@ impl RpcMessageSerialize for &dyn Message {
             .context(HdfsLibErrorKind::ProtobufError)?;
         Ok(())
     }
-    
-   
+
     fn get_serialized_len(&self) -> Result<usize> {
         let size = self.compute_size();
         Ok((size_of_varint32(size) + size) as usize)
@@ -39,24 +38,26 @@ impl RpcMessageSerialize for &dyn Message {
 //}
 
 pub struct Messages<'a, I, R>
-    where I: IntoIterator<Item = R> + Clone,
-          R: Deref<Target = &'a dyn Message>
+where
+    I: IntoIterator<Item = R> + Clone,
+    R: Deref<Target = &'a dyn Message>,
 {
-    messages: I
+    messages: I,
 }
 
 impl<'a, I, R> RpcMessageSerialize for Messages<'a, I, R>
-    where I: IntoIterator<Item = R> + Clone,
-          R: Deref<Target = &'a dyn Message>
+where
+    I: IntoIterator<Item = R> + Clone,
+    R: Deref<Target = &'a dyn Message>,
 {
     fn serialize<W: Write>(&self, buf: &mut W) -> Result<()> {
         for m in self.messages.clone().into_iter() {
             m.serialize(buf)?;
         }
-        
+
         Ok(())
     }
-    
+
     fn get_serialized_len(&self) -> Result<usize> {
         let mut sum = 0;
         for m in self.messages.clone().into_iter() {
@@ -77,13 +78,12 @@ impl<'a, I, R> RpcMessageSerialize for Messages<'a, I, R>
 //}
 
 impl<'a, I, R> Messages<'a, I, R>
-    where I: IntoIterator<Item = R> + Clone,
-          R: Deref<Target = &'a dyn Message>
+where
+    I: IntoIterator<Item = R> + Clone,
+    R: Deref<Target = &'a dyn Message>,
 {
     pub fn new(messages: I) -> Self {
-        Self {
-            messages
-        }
+        Self { messages }
     }
 }
 

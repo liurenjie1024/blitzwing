@@ -1,8 +1,9 @@
+use crate::hadoop_proto::RpcHeader::{
+    RpcResponseHeaderProto, RpcResponseHeaderProto_RpcErrorCodeProto,
+};
 use failure::{Backtrace, Context, Fail};
 use std::fmt::{Display, Formatter};
 use std::time::Duration;
-use crate::hadoop_proto::RpcHeader::{RpcResponseHeaderProto,
-                                     RpcResponseHeaderProto_RpcErrorCodeProto};
 
 #[derive(Debug)]
 pub struct HdfsLibError {
@@ -13,7 +14,7 @@ pub struct HdfsLibError {
 pub struct RpcRemoteErrorInfo {
     exception_class_name: String,
     message: String,
-    error_code: RpcResponseHeaderProto_RpcErrorCodeProto
+    error_code: RpcResponseHeaderProto_RpcErrorCodeProto,
 }
 
 impl<'a> From<&'a RpcResponseHeaderProto> for RpcRemoteErrorInfo {
@@ -21,7 +22,7 @@ impl<'a> From<&'a RpcResponseHeaderProto> for RpcRemoteErrorInfo {
         Self {
             exception_class_name: header.get_exceptionClassName().to_string(),
             message: header.get_errorMsg().to_string(),
-            error_code: header.get_errorDetail()
+            error_code: header.get_errorDetail(),
         }
     }
 }
@@ -50,9 +51,11 @@ pub enum HdfsLibErrorKind {
     TimeOutError(Duration),
     #[fail(display = "Rpc remote error happened: {:?}", _0)]
     RpcRemoteError(RpcRemoteErrorInfo),
-    
+    #[fail(display = "Failed to join tokio task")]
+    TaskJoinError,
+    #[fail(display = "Failed to pass messages")]
+    SyncError,
 }
-
 
 impl HdfsLibError {
     pub fn kind(&self) -> &HdfsLibErrorKind {
