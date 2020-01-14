@@ -1,6 +1,4 @@
-use crate::error::HdfsLibErrorKind::{
-    IoError, ProtobufError, SocketAddressParseError, SyncError, SystemError, TaskJoinError,
-};
+use crate::error::HdfsLibErrorKind::{IoError, ProtobufError, SocketAddressParseError, SyncError, SystemError, TaskJoinError, LockError};
 use crate::error::{HdfsLibError, HdfsLibErrorKind, Result, RpcRemoteErrorInfo};
 use crate::hadoop_proto::{
     IpcConnectionContext::{IpcConnectionContextProto, UserInformationProto},
@@ -23,7 +21,7 @@ use std::fmt::{Debug, Formatter};
 use std::io::Cursor;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
-use std::sync::mpsc::{channel as mpsc_channel, Sender as MpscSender};
+use std::sync::mpsc::{sync_channel as mpsc_sync_channel, SyncSender as MpscSyncSender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::io::{split, ReadHalf, WriteHalf};
@@ -45,6 +43,7 @@ static CALL_ID: AtomicI32 = AtomicI32::new(1024);
 type ConnectionId = String;
 
 struct Response {
+    header: RpcResponseHeaderProto,
     body: Bytes,
 }
 
@@ -85,7 +84,7 @@ struct BasicRpcClientContext {
 struct ConnectionContext {
     rpc_client_context: Arc<BasicRpcClientContext>,
     protocol: String,
-    calls: Arc<Mutex<HashMap<i32, MpscSender<Result<Response>>>>>,
+    calls: Arc<Mutex<HashMap<i32, MpscSyncSender<Result<Response>>>>>,
     stopped: AtomicBool,
 }
 
@@ -242,7 +241,8 @@ impl BasicRpcClient {
         };
         let conn_id = header.get_declaringClassProtocolName();
 
-        if !conn_map.contains_key(conn_id) {
+        // If connection not exits or stopped, we both need to create a new connection for it
+        if conn_map.get(conn_id).map(|c| c.context.is_stopped()).unwrap_or(true) {
             let conn = self.create_and_start_connection(conn_id)?;
             conn_map.insert(conn_id.to_string(), conn);
         }
@@ -262,7 +262,7 @@ impl Connection {
         Response: Message,
     {
         let call_id = CALL_ID.fetch_add(1, Ordering::SeqCst);
-        let (sender, receiver) = mpsc_channel();
+        let (sender, receiver) = mpsc_sync_channel(0);
 
         let rpc_call = RpcCall {
             id: call_id,
@@ -271,8 +271,16 @@ impl Connection {
         };
 
         {
-            let mut calls = self.context.calls.lock().expect("Failed to lock calls");
-            calls.insert(call_id, sender);
+            match self.context.calls.lock() {
+                Ok(mut calls) => {
+                    calls.insert(call_id, sender);
+                },
+                Err(e) => {
+                    error!("Failed to lock calls for connection [{:?}], call id [{}], {}", self
+                        .context, call_id, e);
+                    return Err(LockError.into())
+                }
+            }
         }
 
         let event = Event::Call(rpc_call);
@@ -286,14 +294,14 @@ impl Connection {
             .and_then(|resp| {
                 let mut reader = resp.body.into_buf().reader();
                 let mut input_stream = CodedInputStream::new(&mut reader);
-                let header = deserialize::<RpcResponseHeaderProto>(&mut input_stream)?;
 
-                match header.get_status() {
+                match resp.header.get_status() {
                     RpcResponseHeaderProto_RpcStatusProto::SUCCESS => {
                         Ok(deserialize::<Response>(&mut input_stream)?)
                     }
                     _ => Err(
-                        HdfsLibErrorKind::RpcRemoteError(RpcRemoteErrorInfo::from(&header)).into(),
+                        HdfsLibErrorKind::RpcRemoteError(RpcRemoteErrorInfo::from(&resp.header))
+                            .into(),
                     ),
                 }
             })
@@ -346,7 +354,8 @@ impl ConnectionReader {
             let call_id = header.get_callId() as i32;
 
             let resp_result = Ok(Response {
-                body: buffer.clone(),
+                header,
+                body: buffer.slice_from(input_stream.pos() as usize),
             });
 
             match self.context.calls.lock() {
@@ -600,3 +609,12 @@ impl Debug for ConnectionContext {
             .finish()
     }
 }
+
+//#[cfg(test)]
+//mod tests {
+//
+//    #[test]
+//    fn test_deserialize() {
+//
+//    }
+//}

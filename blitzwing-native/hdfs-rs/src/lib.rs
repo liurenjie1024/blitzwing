@@ -1,5 +1,6 @@
 extern crate async_trait;
 extern crate bytes;
+#[macro_use]
 extern crate failure;
 extern crate failure_derive;
 extern crate tokio;
