@@ -34,3 +34,7 @@ fn do_main() -> Result<()> {
     println!("File status of {} is {:?}", file_path, file_status);
     Ok(())
 }
+
+fn show_block_locations() -> Result<()> {
+    Ok(())
+}
