@@ -11,7 +11,7 @@ use hdfs_rs::fs::make_file_system;
 use std::sync::Arc;
 
 fn main() {
-    let path = "/Users/renliu/Workspace/hdfs-rs/hdfs-tools/log4rs/hdfs.yaml";
+    let path = "/Users/renliu/Workspace/blitzwing/blitzwing-native/hdfs-tools/log4rs/hdfs.yaml";
     //    let path = "/root/liu/hdfs-rs/hdfs-tools/log4rs/hdfs.yaml";
     log4rs::init_file(path, Default::default()).expect("Log4rs initialization failed!");
 

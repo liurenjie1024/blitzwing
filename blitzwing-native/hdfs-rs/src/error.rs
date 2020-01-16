@@ -61,6 +61,13 @@ impl HdfsLibError {
     pub fn kind(&self) -> &HdfsLibErrorKind {
         self.inner.get_context()
     }
+    
+    pub fn into_std_io_error(self) -> std::io::Error {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            failure::Error::from(self)
+        )
+    }
 }
 
 impl Display for HdfsLibError {
@@ -79,6 +86,16 @@ impl Fail for HdfsLibError {
     }
 }
 
+//impl Error for HdfsLibError {
+//}
+//
+//impl Into<std::io::Error> for HdfsLibError {
+//    fn into(self) -> std::io::Error {
+//        std::io::Error::new(std::io::ErrorKind::Other, Box::new(self) as Box<dyn Error + Send +
+//        Sync + 'static> )
+//    }
+//}
+
 impl From<HdfsLibErrorKind> for HdfsLibError {
     fn from(kind: HdfsLibErrorKind) -> Self {
         Self {
@@ -94,3 +111,25 @@ impl From<Context<HdfsLibErrorKind>> for HdfsLibError {
 }
 
 pub type Result<T> = std::result::Result<T, HdfsLibError>;
+
+
+// macros for helping to generate error
+macro_rules! invalid_argument {
+    ($fmt:expr, $($arg:tt)*) => {
+        return Err(HdfsLibError::from(InvalidArgumentError(format!($fmt, $
+        ($arg)*))));
+    };
+}
+
+macro_rules! check_args {
+    ($cond:expr) => {
+        if !($cond) {
+            invalid_argument!("{}", _failure__stringify!($cond));
+        }
+    };
+    ($cond:expr, $fmt:expr, $($arg:tt)*) => {
+        if !($cond) {
+            invalid_argument!($fmt, $($arg)*);
+        }
+    };
+}

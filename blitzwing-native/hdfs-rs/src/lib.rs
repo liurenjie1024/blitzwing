@@ -12,6 +12,7 @@ extern crate lazy_static;
 extern crate uuid;
 
 pub mod config;
+#[macro_use]
 pub mod error;
 pub mod fs;
 pub mod hadoop_proto;
