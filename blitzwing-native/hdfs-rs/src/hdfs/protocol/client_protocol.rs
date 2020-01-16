@@ -10,7 +10,7 @@ use std::convert::TryFrom;
 
 pub trait ClientProtocol {
     fn get_file_info(&self, path: &str) -> Result<FileStatus>;
-//    fn get_block_locations(&self, path: &str, offset: i64, length: i64) ->
+    //    fn get_block_locations(&self, path: &str, offset: i64, length: i64) ->
 }
 
 const PROTOCOL_NAME: &'static str = "org.apache.hadoop.hdfs.protocol.ClientProtocol";

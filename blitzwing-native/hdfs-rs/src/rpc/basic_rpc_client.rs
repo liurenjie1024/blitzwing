@@ -1,4 +1,7 @@
-use crate::error::HdfsLibErrorKind::{IoError, ProtobufError, SocketAddressParseError, SyncError, SystemError, TaskJoinError, LockError};
+use crate::error::HdfsLibErrorKind::{
+    IoError, LockError, ProtobufError, SocketAddressParseError, SyncError, SystemError,
+    TaskJoinError,
+};
 use crate::error::{HdfsLibError, HdfsLibErrorKind, Result, RpcRemoteErrorInfo};
 use crate::hadoop_proto::{
     IpcConnectionContext::{IpcConnectionContextProto, UserInformationProto},
@@ -242,7 +245,11 @@ impl BasicRpcClient {
         let conn_id = header.get_declaringClassProtocolName();
 
         // If connection not exits or stopped, we both need to create a new connection for it
-        if conn_map.get(conn_id).map(|c| c.context.is_stopped()).unwrap_or(true) {
+        if conn_map
+            .get(conn_id)
+            .map(|c| c.context.is_stopped())
+            .unwrap_or(true)
+        {
             let conn = self.create_and_start_connection(conn_id)?;
             conn_map.insert(conn_id.to_string(), conn);
         }
@@ -274,11 +281,13 @@ impl Connection {
             match self.context.calls.lock() {
                 Ok(mut calls) => {
                     calls.insert(call_id, sender);
-                },
+                }
                 Err(e) => {
-                    error!("Failed to lock calls for connection [{:?}], call id [{}], {}", self
-                        .context, call_id, e);
-                    return Err(LockError.into())
+                    error!(
+                        "Failed to lock calls for connection [{:?}], call id [{}], {}",
+                        self.context, call_id, e
+                    );
+                    return Err(LockError.into());
                 }
             }
         }
@@ -299,10 +308,10 @@ impl Connection {
                     RpcResponseHeaderProto_RpcStatusProto::SUCCESS => {
                         Ok(deserialize::<Response>(&mut input_stream)?)
                     }
-                    _ => Err(
-                        HdfsLibErrorKind::RpcRemoteError(RpcRemoteErrorInfo::from(&resp.header))
-                            .into(),
-                    ),
+                    _ => Err(HdfsLibErrorKind::RpcRemoteError(RpcRemoteErrorInfo::from(
+                        &resp.header,
+                    ))
+                    .into()),
                 }
             })
     }
