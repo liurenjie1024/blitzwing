@@ -7,6 +7,9 @@ use crate::rpc::rpc_client::RpcClientRef;
 use std::convert::TryFrom;
 use crate::hdfs::block::LocatedBlocks;
 use crate::error::HdfsLibErrorKind::SystemError;
+use std::sync::Arc;
+
+pub type ClientProtocolRef = Arc<dyn ClientProtocol>;
 
 pub trait ClientProtocol {
     fn get_file_info(&self, path: &str) -> Result<FileStatus>;

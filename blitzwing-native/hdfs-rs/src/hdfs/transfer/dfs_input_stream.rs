@@ -2,17 +2,24 @@ use crate::error::HdfsLibErrorKind::InvalidArgumentError;
 use crate::error::Result;
 use crate::fs::input_stream::FsInputStream;
 use crate::hdfs::block::LocatedBlocks;
-use crate::hdfs::protocol::client_protocol::ClientProtocol;
+use crate::hdfs::protocol::client_protocol::{ClientProtocol, ClientProtocolRef};
 use std::io::{Error as IoError, Read, Seek, SeekFrom};
 use std::result::Result as StdResult;
 use std::sync::Arc;
+use crate::hdfs::transfer::block_reader::BlockReader;
+use crate::hdfs::datanode::DatanodeInfo;
 
 struct DFSInputStream {
-    name_node: Arc<dyn ClientProtocol>,
+    name_node: ClientProtocolRef,
     blocks: LocatedBlocks,
     file_path: String,
 
     pos: u64,
+    
+    // We should keep updating these three fields in a transactional way
+    current_block_idx: Option<usize>,
+    block_reader: Option<Box<dyn BlockReader>>,
+    current_data_node: Option<DatanodeInfo>,
 }
 
 impl Read for DFSInputStream {
@@ -31,7 +38,7 @@ impl FsInputStream for DFSInputStream {}
 
 impl DFSInputStream {
     pub fn get_len(&self) -> Result<u64> {
-        unimplemented!()
+        Ok(self.blocks.get_file_len())
     }
 
     fn do_seek(&mut self, pos: SeekFrom) -> Result<u64> {
@@ -69,4 +76,32 @@ impl DFSInputStream {
             Ok(())
         }
     }
+    
+    fn do_read(&mut self, buf: &mut [u8]) -> Result<usize> {
+        unimplemented!()
+    }
+    
+    fn seek_to_target_block(&mut self) -> Result<()> {
+        if let Some(idx) = self.current_block_idx {
+            match self.blocks.in_range(idx, self.pos) {
+                Ok(true) => {
+                    debug!("Current position {} in block [{:?}], will skip seeking to new block",
+                           self.pos, self.blocks.get_block(idx));
+                    return Ok(());
+                },
+                Ok(false) => {
+                    debug!("Current position {} not in block [{:?}], will seek to new block",
+                           self.pos, self.blocks.get_block(idx));
+                },
+                Err(e) => {
+                    warn!("Failed to check whether current position {} in block range: {}",
+                        self.pos, e);
+                }
+            }
+        }
+        
+        Ok(())
+    }
 }
+
+

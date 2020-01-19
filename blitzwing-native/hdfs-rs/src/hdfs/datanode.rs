@@ -2,6 +2,7 @@ use crate::error::{HdfsLibError, Result};
 use crate::hadoop_proto::hdfs::{DatanodeIDProto, DatanodeInfoProto};
 use std::convert::TryFrom;
 
+#[derive(Debug, Copy)]
 pub struct DatanodeId {
     ip_addr: String,
     hostname: String,
@@ -12,10 +13,12 @@ pub struct DatanodeId {
     datanode_uuid: String,
 }
 
+#[derive(Debug, Copy)]
 pub struct DatanodeInfo {
     datanode_id: DatanodeId,
 }
 
+#[derive(Debug, Copy)]
 pub struct DatanodeInfoWithStorage {
     datanode_info: DatanodeInfo,
     storage_id: String,
