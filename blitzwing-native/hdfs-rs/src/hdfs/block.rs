@@ -6,6 +6,7 @@ use std::convert::TryFrom;
 use failure::_core::cmp::Ordering;
 use std::ops::Range;
 use crate::hdfs::block::OffsetOrRange::{Offset, Range as ORange};
+use failure::_core::intrinsics::log2f32;
 
 #[derive(Debug, Copy)]
 pub struct LocatedBlocks {
@@ -41,6 +42,16 @@ pub struct Block {
 enum OffsetOrRange {
     Offset(u64),
     Range(Range<u64>),
+}
+
+impl OffsetOrRange {
+    pub fn offset(v: u64) -> Self {
+        OffsetOrRange::Offset(v)
+    }
+    
+    pub fn range(v: Range<u64>) -> Self {
+        OffsetOrRange::Range(v)
+    }
 }
 
 impl OffsetOrRange {
@@ -101,23 +112,33 @@ impl LocatedBlocks {
     pub fn get_block(&self, block_idx: usize) -> Option<&LocatedBlock> {
         self.blocks.get(block_idx)
     }
-}
-
-impl PartialEq for LocatedBlock {
-    fn eq(&self, other: &Self) -> bool {
-        self.offset == other.offset
+    
+    pub fn search_block(&self, offset: u64) -> Option<usize> {
+        self.blocks.binary_search_by_key(&OffsetOrRange::offset(offset), |b|b.offset_range())
+            .ok()
     }
-}
-
-impl PartialOrd for LocatedBlock {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.offset.cmp(&other.offset))
+    
+    pub fn blocks(self) -> impl Iterator<Item=LocatedBlock> {
+        self.blocks.into_iter()
     }
-}
-
-impl Ord for LocatedBlock {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.offset.cmp(&other.offset)
+    
+    /// Add a new block or replace old block with same offset
+    pub fn add_block(&mut self, block: LocatedBlock) -> Result<usize> {
+        let new_offset_range = block.offset_range();
+        match self.blocks.binary_search_by_key(&new_offset_range, |b| b.offset_range()) {
+            Ok(idx) => {
+                debug!("Old block [{:?}] already exists, will be replaced with new block [{:?}].",
+                        &self.blocks[idx], &block);
+                
+                *&mut self.blocks[idx] = block;
+                Ok(idx)
+            },
+            Err(idx) => {
+                // block not found, will add to it
+                self.blocks.insert(idx, block);
+                Ok(idx)
+            }
+        }
     }
 }
 
@@ -128,6 +149,14 @@ impl LocatedBlock {
     
     pub fn get_len(&self) -> u64 {
         self.block.block.num_bytes
+    }
+    
+    pub fn offset_range(&self) -> OffsetOrRange {
+        OffsetOrRange::range(self.offset..(self.offset + self.get_len()))
+    }
+    
+    pub fn location(&self, idx: usize) -> Option<&DatanodeInfoWithStorage> {
+        self.locations.get(idx)
     }
 }
 
@@ -186,6 +215,19 @@ impl TryFrom<&'_ ExtendedBlockProto> for ExtendedBlock {
                 generation_stamp: proto.get_generationStamp(),
             },
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::hdfs::block::OffsetOrRange;
+    
+    #[test]
+    fn test_compare_offset_or_range() {
+        let offset = OffsetOrRange::Offset(10);
+        let range = OffsetOrRange::Range(5..10);
+        
+        assert!(offset != range);
     }
 }
 

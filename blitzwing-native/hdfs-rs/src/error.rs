@@ -102,7 +102,7 @@ pub type Result<T> = std::result::Result<T, HdfsLibError>;
 // macros for helping to generate error
 macro_rules! invalid_argument {
     ($fmt:expr, $($arg:tt)*) => {
-        return Err(HdfsLibError::from(InvalidArgumentError(format!($fmt, $
+        return Err(HdfsLibError::from(HdfsLibErrorKind::InvalidArgumentError(format!($fmt, $
         ($arg)*))));
     };
 }
@@ -117,6 +117,12 @@ macro_rules! check_args {
         if !($cond) {
             invalid_argument!($fmt, $($arg)*);
         }
+    };
+}
+
+macro_rules! sys_err {
+    ($fmt:expr, $($arg:tt)*) => {
+        HdfsLibError::from(HdfsLibErrorKind::SystemError(format!($fmt, $($arg)*)))
     };
 }
 

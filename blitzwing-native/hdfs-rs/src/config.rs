@@ -32,6 +32,15 @@ impl Configuration {
             .map(|v| T::from_str(&v.value).map_err(|e| e.into()))
             .transpose()
     }
+    
+    pub fn get_or<T>(&self, key: &str, default_value: T) -> Result<T>
+        where
+            T: FromStr,
+            T::Err: Into<HdfsLibError>,
+    {
+        self.get(key)
+            .map(|r| r.unwrap_or(default_value))
+    }
 }
 
 pub type ConfigRef = Arc<Configuration>;

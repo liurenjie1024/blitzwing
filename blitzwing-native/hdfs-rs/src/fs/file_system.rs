@@ -8,7 +8,6 @@ pub type FileSystemRef = Arc<dyn FileSystem>;
 
 pub trait FileSystem {
     fn get_file_status(&self, path: &str) -> Result<FileStatus>;
-    fn get_block_locations(&self, path: &str)
 }
 
 // Methods for creating file systems
