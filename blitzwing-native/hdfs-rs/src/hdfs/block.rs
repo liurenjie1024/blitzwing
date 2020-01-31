@@ -1,14 +1,12 @@
-use crate::error::HdfsLibErrorKind::InvalidArgumentError;
-use crate::error::{HdfsLibError, Result};
+use crate::error::{HdfsLibError, Result, HdfsLibErrorKind};
 use crate::hadoop_proto::hdfs::{ExtendedBlockProto, LocatedBlockProto, LocatedBlocksProto};
 use crate::hdfs::datanode::{DatanodeInfo, DatanodeInfoWithStorage};
 use std::convert::TryFrom;
 use failure::_core::cmp::Ordering;
 use std::ops::Range;
 use crate::hdfs::block::OffsetOrRange::{Offset, Range as ORange};
-use failure::_core::intrinsics::log2f32;
 
-#[derive(Debug, Copy)]
+#[derive(Debug, Clone)]
 pub struct LocatedBlocks {
     file_len: u64,
     // blocks are sorted by their offset
@@ -18,7 +16,7 @@ pub struct LocatedBlocks {
     last_block_complete: bool,
 }
 
-#[derive(Debug, Copy)]
+#[derive(Debug, Clone)]
 pub struct LocatedBlock {
     block: ExtendedBlock,
     offset: u64,
@@ -26,13 +24,13 @@ pub struct LocatedBlock {
     corrupt: bool,
 }
 
-#[derive(Debug, Copy)]
+#[derive(Debug, Clone)]
 pub struct ExtendedBlock {
     pool_id: String,
     block: Block,
 }
 
-#[derive(Debug, Copy)]
+#[derive(Debug, Clone)]
 pub struct Block {
     block_id: u64,
     num_bytes: u64,
@@ -72,6 +70,10 @@ impl OffsetOrRange {
             r1.end.cmp(&r2.end)
         }
     }
+}
+
+impl Eq for OffsetOrRange {
+    
 }
 
 impl PartialEq for OffsetOrRange {

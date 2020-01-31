@@ -16,7 +16,7 @@ use crate::hadoop_proto::RpcHeader::{
 };
 use crate::rpc::message::{deserialize, Messages, RpcMessageSerialize};
 use crate::rt::get_runtime;
-use bytes::{Buf, BufMut, Bytes, BytesMut, IntoBuf};
+use bytes::{Buf, BufMut, Bytes, BytesMut, buf::ext::{BufExt, BufMutExt}};
 use failure::ResultExt;
 use protobuf::{CodedInputStream, Message};
 use std::collections::HashMap;
@@ -301,7 +301,7 @@ impl Connection {
             .recv_timeout(timeout)
             .context(HdfsLibErrorKind::TimeOutError(timeout))?
             .and_then(|resp| {
-                let mut reader = resp.body.into_buf().reader();
+                let mut reader = resp.body.reader();
                 let mut input_stream = CodedInputStream::new(&mut reader);
 
                 match resp.header.get_status() {
@@ -364,7 +364,7 @@ impl ConnectionReader {
 
             let resp_result = Ok(Response {
                 header,
-                body: buffer.slice_from(input_stream.pos() as usize),
+                body: buffer.slice(input_stream.pos() as usize..),
             });
 
             match self.context.calls.lock() {
@@ -436,7 +436,7 @@ impl ConnectionWriter {
 
                         let serialized_len = request.get_serialized_len()?;
                         let mut buffer = BytesMut::with_capacity(4 + serialized_len);
-                        buffer.put_i32_be(serialized_len as i32);
+                        buffer.put_i32(serialized_len as i32);
 
                         let mut writer = buffer.writer();
                         request.serialize(&mut writer)?;
@@ -487,7 +487,7 @@ impl ConnectionLoop {
         let mut dst = [0 as u8; ConnectionLoop::connection_header_len()];
 
         {
-            let mut buffer = Cursor::new(&mut dst);
+            let mut buffer: &mut [u8] = &mut dst;
             buffer.put_slice(RPC_HEADER.as_bytes());
             buffer.put_i8(RPC_CURRENT_VERSION as i8);
 
@@ -521,7 +521,7 @@ impl ConnectionLoop {
         let serialized_len = request.get_serialized_len()?;
 
         let mut buffer = BytesMut::with_capacity(4 + serialized_len);
-        buffer.put_i32_be(serialized_len as i32);
+        buffer.put_i32(serialized_len as i32);
 
         let mut writer = buffer.writer();
         request.serialize(&mut writer)?;

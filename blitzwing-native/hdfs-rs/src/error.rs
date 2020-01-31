@@ -102,7 +102,9 @@ pub type Result<T> = std::result::Result<T, HdfsLibError>;
 // macros for helping to generate error
 macro_rules! invalid_argument {
     ($fmt:expr, $($arg:tt)*) => {
-        return Err(HdfsLibError::from(HdfsLibErrorKind::InvalidArgumentError(format!($fmt, $
+        return Err(crate::error::HdfsLibError::from
+        (crate::error::HdfsLibErrorKind::InvalidArgumentError(format!
+        ($fmt, $
         ($arg)*))));
     };
 }
@@ -122,13 +124,13 @@ macro_rules! check_args {
 
 macro_rules! sys_err {
     ($fmt:expr, $($arg:tt)*) => {
-        HdfsLibError::from(HdfsLibErrorKind::SystemError(format!($fmt, $($arg)*)))
+        crate::error::HdfsLibError::from(crate::error::HdfsLibErrorKind::SystemError(format!($fmt, $($arg)*)))
     };
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::error::{HdfsLibError, HdfsLibErrorKind::InvalidArgumentError};
+    
     #[test]
     fn test_check_args() {
         let e = || {
