@@ -61,7 +61,8 @@ impl<'a> RpcClientBuilder<'a> {
     }
 
     fn create_rpc_client(&self) -> Result<RpcClientRef> {
-        let client_id = Bytes::from(Uuid::new_v4().as_bytes() as &[u8]);
+        let client_uuid = Uuid::new_v4();
+        let client_id = Bytes::copy_from_slice(client_uuid.as_bytes() as &[u8]);
 
         let inner =
             BasicRpcClientBuilder::new(self.authority, client_id.clone(), self.config.clone())

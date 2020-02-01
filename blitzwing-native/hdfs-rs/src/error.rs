@@ -55,6 +55,8 @@ pub enum HdfsLibErrorKind {
     TaskJoinError,
     #[fail(display = "Failed to pass messages")]
     SyncError,
+    #[fail(display = "Failed to parse configuration: {}", _0)]
+    ConfigError(String),
 }
 
 impl HdfsLibError {

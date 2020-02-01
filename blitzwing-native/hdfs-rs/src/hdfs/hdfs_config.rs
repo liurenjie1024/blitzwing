@@ -1,6 +1,7 @@
 use crate::config::ConfigRef;
 use std::sync::Arc;
-use crate::error::Result;
+use crate::error::{Result, HdfsLibErrorKind};
+use failure::ResultExt;
 
 pub type HdfsClientConfigRef = Arc<HdfsClientConfig>;
 

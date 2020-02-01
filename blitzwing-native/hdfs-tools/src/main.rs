@@ -20,6 +20,10 @@ fn main() {
     }
 }
 
+fn do_main() -> Result<()> {
+    unimplemented!()
+}
+
 fn list_file_status() -> Result<()> {
     let path = "hdfs://hadoop-docker-build-3648195.lvs02.dev.ebayc3.com:9000";
     let config = Arc::new(Configuration::new());
@@ -36,16 +40,16 @@ fn list_file_status() -> Result<()> {
 }
 
 fn show_block_locations() -> Result<()> {
-    p
-    let config = Arc::new(Configuration::new());
-    let fs = make_file_system(&path, config)?;
-    
-    let file_path = "/user/root/input/slaves";
-    let file_status = fs (file_path)?;
-    println!("File status of {} is {:?}", file_path, file_status);
-    
-    let file_path = "/";
-    let file_status = fs.get_file_status(file_path)?;
-    println!("File status of {} is {:?}", file_path, file_status);
-    Ok(())
+//    let config = Arc::new(Configuration::new());
+//    let fs = make_file_system(&path, config)?;
+//
+//    let file_path = "/user/root/input/slaves";
+//    let file_status = fs (file_path)?;
+//    println!("File status of {} is {:?}", file_path, file_status);
+//
+//    let file_path = "/";
+//    let file_status = fs.get_file_status(file_path)?;
+//    println!("File status of {} is {:?}", file_path, file_status);
+//    Ok(())
+    unimplemented!()
 }

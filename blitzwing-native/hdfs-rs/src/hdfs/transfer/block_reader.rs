@@ -2,13 +2,13 @@ use crate::error::{Result, HdfsLibError};
 use std::io::{Read, Error, Result as IoResult, Write};
 use crate::hdfs::hdfs_config::HdfsClientConfigRef;
 
-pub type BlockReaderRef = Box<dyn BlockReader>;
+pub(super) type BlockReaderRef = Box<dyn BlockReader>;
 
 pub(super) trait BlockReader: Read {
     fn skip(&mut self, n: usize) -> Result<()>;
 }
 
-pub struct BlockReaderBuilder {
+pub(super) struct BlockReaderBuilder {
     config: HdfsClientConfigRef,
     endpoint: String,
     // offset in block
@@ -35,7 +35,8 @@ impl BlockReaderBuilder {
     }
     
     /// Currently we only support tcp remote block reader
-    pub fn build(self) -> Result<BlockReaderRef> {
+    fn build(self) -> Result<BlockReaderRef> {
+        unimplemented!()
     }
 }
 

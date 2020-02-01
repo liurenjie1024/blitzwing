@@ -16,11 +16,13 @@ pub(super) struct PacketReceiver {
     eof: bool,
 }
 
+#[derive(Debug)]
 pub(super) struct PacketHeader {
     packet_len: u32,
     proto: PacketHeaderProto,
 }
 
+#[derive(Debug)]
 pub(super) struct Packet<'a> {
     header: PacketHeader,
     checksum: &'a [u8],
@@ -136,8 +138,8 @@ mod tests {
             .expect("Packet should not be None");
         
         let expected_header= make_packet_header(data.len() as i32, false, 1);
-        assert_eq!(expected_header, &packet.header);
-        assert_eq!(&checksum, packet.checksum);
-        assert_eq!(&data, packet.data);
+        assert_eq!(&expected_header, &packet.header.proto);
+        assert_eq!(checksum.as_slice(), packet.checksum);
+        assert_eq!(data.as_slice(), packet.data);
     }
 }

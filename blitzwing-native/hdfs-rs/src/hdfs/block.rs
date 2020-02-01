@@ -72,9 +72,7 @@ impl OffsetOrRange {
     }
 }
 
-impl Eq for OffsetOrRange {
-    
-}
+impl Eq for OffsetOrRange {}
 
 impl PartialEq for OffsetOrRange {
     fn eq(&self, other: &Self) -> bool {
@@ -107,8 +105,9 @@ impl LocatedBlocks {
     pub fn in_range(&self, block_idx: usize, offset: u64) -> Result<bool> {
         self.blocks.get(block_idx)
             .map(|b|  b.in_range(offset))
-            .ok_or_else(|| invalid_argument!("Index {} exceeded vector size {}",
-            block_idx, self.blocks.len()))
+            .ok_or_else(|| HdfsLibErrorKind::InvalidArgumentError(format!(
+                "Index {} exceeded vector size {}",
+            block_idx, self.blocks.len())).into())
     }
     
     pub fn get_block(&self, block_idx: usize) -> Option<&LocatedBlock> {
@@ -153,7 +152,7 @@ impl LocatedBlock {
         self.block.block.num_bytes
     }
     
-    pub fn offset_range(&self) -> OffsetOrRange {
+    fn offset_range(&self) -> OffsetOrRange {
         OffsetOrRange::range(self.offset..(self.offset + self.get_len()))
     }
     
