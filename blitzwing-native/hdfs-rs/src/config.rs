@@ -1,9 +1,9 @@
-use crate::error::{HdfsLibError, HdfsLibErrorKind};
 use crate::error::Result;
+use crate::error::{HdfsLibError, HdfsLibErrorKind};
+use failure::{Fail, ResultExt};
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
-use failure::{Fail, ResultExt};
 
 type ConfigKey = String;
 
@@ -30,20 +30,20 @@ impl Configuration {
     {
         self.data
             .get(key)
-            .map(|v| T::from_str(&v.value).map_err(|e| HdfsLibError::from(e.context
-            (HdfsLibErrorKind::ConfigError(key
-                .to_string())))))
+            .map(|v| {
+                T::from_str(&v.value).map_err(|e| {
+                    HdfsLibError::from(e.context(HdfsLibErrorKind::ConfigError(key.to_string())))
+                })
+            })
             .transpose()
     }
-    
+
     pub fn get_or<T>(&self, key: &str, default_value: T) -> Result<T>
-        where
-            T: FromStr,
-            T::Err: Fail,
+    where
+        T: FromStr,
+        T::Err: Fail,
     {
-        self.get(key)
-            .map(|r| r.unwrap_or(default_value))
-            
+        self.get(key).map(|r| r.unwrap_or(default_value))
     }
 }
 

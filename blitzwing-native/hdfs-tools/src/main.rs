@@ -40,16 +40,16 @@ fn list_file_status() -> Result<()> {
 }
 
 fn show_block_locations() -> Result<()> {
-//    let config = Arc::new(Configuration::new());
-//    let fs = make_file_system(&path, config)?;
-//
-//    let file_path = "/user/root/input/slaves";
-//    let file_status = fs (file_path)?;
-//    println!("File status of {} is {:?}", file_path, file_status);
-//
-//    let file_path = "/";
-//    let file_status = fs.get_file_status(file_path)?;
-//    println!("File status of {} is {:?}", file_path, file_status);
-//    Ok(())
+    //    let config = Arc::new(Configuration::new());
+    //    let fs = make_file_system(&path, config)?;
+    //
+    //    let file_path = "/user/root/input/slaves";
+    //    let file_status = fs (file_path)?;
+    //    println!("File status of {} is {:?}", file_path, file_status);
+    //
+    //    let file_path = "/";
+    //    let file_status = fs.get_file_status(file_path)?;
+    //    println!("File status of {} is {:?}", file_path, file_status);
+    //    Ok(())
     unimplemented!()
 }

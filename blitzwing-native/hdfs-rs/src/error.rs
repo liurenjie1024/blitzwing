@@ -132,16 +132,16 @@ macro_rules! sys_err {
 
 #[cfg(test)]
 mod tests {
-    
+
     #[test]
     fn test_check_args() {
         let e = || {
             let (a, b) = (1, 2);
             check_args!(a == b);
-            
+
             Ok(())
         };
-        
+
         let r = e();
         assert!(r.is_err());
         println!("{}", r.err().unwrap());

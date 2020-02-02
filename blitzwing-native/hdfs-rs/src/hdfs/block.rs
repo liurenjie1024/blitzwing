@@ -1,10 +1,10 @@
-use crate::error::{HdfsLibError, Result, HdfsLibErrorKind};
+use crate::error::{HdfsLibError, HdfsLibErrorKind, Result};
 use crate::hadoop_proto::hdfs::{ExtendedBlockProto, LocatedBlockProto, LocatedBlocksProto};
-use crate::hdfs::datanode::{DatanodeInfo, DatanodeInfoWithStorage};
-use std::convert::TryFrom;
-use failure::_core::cmp::Ordering;
-use std::ops::Range;
 use crate::hdfs::block::OffsetOrRange::{Offset, Range as ORange};
+use crate::hdfs::datanode::{DatanodeInfo, DatanodeInfoWithStorage};
+use failure::_core::cmp::Ordering;
+use std::convert::TryFrom;
+use std::ops::Range;
 
 #[derive(Debug, Clone)]
 pub struct LocatedBlocks {
@@ -46,7 +46,7 @@ impl OffsetOrRange {
     pub fn offset(v: u64) -> Self {
         OffsetOrRange::Offset(v)
     }
-    
+
     pub fn range(v: Range<u64>) -> Self {
         OffsetOrRange::Range(v)
     }
@@ -62,7 +62,7 @@ impl OffsetOrRange {
             Ordering::Equal
         }
     }
-    
+
     fn order_of_range(r1: &Range<u64>, r2: &Range<u64>) -> Ordering {
         if r1.start != r2.start {
             r1.start.cmp(&r2.start)
@@ -101,39 +101,51 @@ impl LocatedBlocks {
     pub fn get_file_len(&self) -> u64 {
         self.file_len
     }
-    
+
     pub fn in_range(&self, block_idx: usize, offset: u64) -> Result<bool> {
-        self.blocks.get(block_idx)
-            .map(|b|  b.in_range(offset))
-            .ok_or_else(|| HdfsLibErrorKind::InvalidArgumentError(format!(
-                "Index {} exceeded vector size {}",
-            block_idx, self.blocks.len())).into())
+        self.blocks
+            .get(block_idx)
+            .map(|b| b.in_range(offset))
+            .ok_or_else(|| {
+                HdfsLibErrorKind::InvalidArgumentError(format!(
+                    "Index {} exceeded vector size {}",
+                    block_idx,
+                    self.blocks.len()
+                ))
+                .into()
+            })
     }
-    
+
     pub fn get_block(&self, block_idx: usize) -> Option<&LocatedBlock> {
         self.blocks.get(block_idx)
     }
-    
+
     pub fn search_block(&self, offset: u64) -> Option<usize> {
-        self.blocks.binary_search_by_key(&OffsetOrRange::offset(offset), |b|b.offset_range())
+        self.blocks
+            .binary_search_by_key(&OffsetOrRange::offset(offset), |b| b.offset_range())
             .ok()
     }
-    
-    pub fn blocks(self) -> impl Iterator<Item=LocatedBlock> {
+
+    pub fn blocks(self) -> impl Iterator<Item = LocatedBlock> {
         self.blocks.into_iter()
     }
-    
+
     /// Add a new block or replace old block with same offset
     pub fn add_block(&mut self, block: LocatedBlock) -> Result<usize> {
         let new_offset_range = block.offset_range();
-        match self.blocks.binary_search_by_key(&new_offset_range, |b| b.offset_range()) {
+        match self
+            .blocks
+            .binary_search_by_key(&new_offset_range, |b| b.offset_range())
+        {
             Ok(idx) => {
-                debug!("Old block [{:?}] already exists, will be replaced with new block [{:?}].",
-                        &self.blocks[idx], &block);
-                
+                debug!(
+                    "Old block [{:?}] already exists, will be replaced with new block [{:?}].",
+                    &self.blocks[idx], &block
+                );
+
                 *&mut self.blocks[idx] = block;
                 Ok(idx)
-            },
+            }
             Err(idx) => {
                 // block not found, will add to it
                 self.blocks.insert(idx, block);
@@ -147,15 +159,15 @@ impl LocatedBlock {
     pub fn in_range(&self, offset: u64) -> bool {
         offset >= self.offset && offset < (self.offset + self.get_len())
     }
-    
+
     pub fn get_len(&self) -> u64 {
         self.block.block.num_bytes
     }
-    
+
     fn offset_range(&self) -> OffsetOrRange {
         OffsetOrRange::range(self.offset..(self.offset + self.get_len()))
     }
-    
+
     pub fn location(&self, idx: usize) -> Option<&DatanodeInfoWithStorage> {
         self.locations.get(idx)
     }
@@ -222,14 +234,12 @@ impl TryFrom<&'_ ExtendedBlockProto> for ExtendedBlock {
 #[cfg(test)]
 mod tests {
     use crate::hdfs::block::OffsetOrRange;
-    
+
     #[test]
     fn test_compare_offset_or_range() {
         let offset = OffsetOrRange::Offset(10);
         let range = OffsetOrRange::Range(5..10);
-        
+
         assert!(offset != range);
     }
 }
-
-

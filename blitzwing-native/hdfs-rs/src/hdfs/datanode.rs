@@ -31,7 +31,7 @@ impl DatanodeInfoWithStorage {
             storage_id: storage_id.to_string(),
         }
     }
-    
+
     pub fn datanode_info(&self) -> DatanodeInfo {
         self.datanode_info.clone()
     }

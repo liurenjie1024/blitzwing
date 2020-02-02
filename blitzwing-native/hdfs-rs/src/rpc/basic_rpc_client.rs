@@ -16,7 +16,10 @@ use crate::hadoop_proto::RpcHeader::{
 };
 use crate::rpc::message::{deserialize, Messages, RpcMessageSerialize};
 use crate::rt::get_runtime;
-use bytes::{Buf, BufMut, Bytes, BytesMut, buf::ext::{BufExt, BufMutExt}};
+use bytes::{
+    buf::ext::{BufExt, BufMutExt},
+    Buf, BufMut, Bytes, BytesMut,
+};
 use failure::ResultExt;
 use protobuf::{CodedInputStream, Message};
 use std::collections::HashMap;

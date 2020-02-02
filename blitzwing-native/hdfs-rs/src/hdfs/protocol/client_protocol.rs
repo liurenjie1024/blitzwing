@@ -1,12 +1,15 @@
+use crate::error::HdfsLibErrorKind::SystemError;
 use crate::error::Result;
 use crate::fs::file_status::{BuildArgs as FileStatusBuilderArgs, FileStatus};
 use crate::fs::path::FsPathRef;
-use crate::hadoop_proto::ClientNamenodeProtocol::{GetFileInfoRequestProto, GetFileInfoResponseProto, GetBlockLocationsRequestProto, GetBlockLocationsResponseProto};
+use crate::hadoop_proto::ClientNamenodeProtocol::{
+    GetBlockLocationsRequestProto, GetBlockLocationsResponseProto, GetFileInfoRequestProto,
+    GetFileInfoResponseProto,
+};
 use crate::hadoop_proto::ProtobufRpcEngine::RequestHeaderProto;
+use crate::hdfs::block::LocatedBlocks;
 use crate::rpc::rpc_client::RpcClientRef;
 use std::convert::TryFrom;
-use crate::hdfs::block::LocatedBlocks;
-use crate::error::HdfsLibErrorKind::SystemError;
 use std::sync::Arc;
 
 pub type ClientProtocolRef = Arc<dyn ClientProtocol>;
@@ -38,23 +41,25 @@ impl ClientProtocol for RpcClientProtocol {
                 FileStatus::try_from(builder)
             })
     }
-    
+
     fn get_block_locations(&self, path: &str, offset: u64, length: u64) -> Result<LocatedBlocks> {
         let header = RpcClientProtocol::create_request_header("getBlockLocations");
-        
+
         let mut body = GetBlockLocationsRequestProto::new();
         body.set_src(path.to_string());
         body.set_offset(offset);
         body.set_length(length);
-        
+
         self.rpc_client
             .call::<GetBlockLocationsRequestProto, GetBlockLocationsResponseProto>(header, body)
             .and_then(|resp| {
                 if resp.has_locations() {
                     LocatedBlocks::try_from(resp.get_locations())
                 } else {
-                    Err(SystemError("Get block locations response doesn't have locations!".to_string())
-                        .into())
+                    Err(SystemError(
+                        "Get block locations response doesn't have locations!".to_string(),
+                    )
+                    .into())
                 }
             })
     }
