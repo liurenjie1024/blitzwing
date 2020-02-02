@@ -1,6 +1,7 @@
 use crate::error::{HdfsLibError, Result};
 use crate::hdfs::hdfs_config::HdfsClientConfigRef;
 use std::io::{Error, Read, Result as IoResult, Write};
+use crate::hdfs::transfer::packet::PacketReceiver;
 
 pub(super) type BlockReaderRef = Box<dyn BlockReader>;
 
@@ -11,8 +12,7 @@ pub(super) trait BlockReader: Read {
 pub(super) struct BlockReaderBuilder {
     config: HdfsClientConfigRef,
     endpoint: String,
-    // offset in block
-    block_offset: u64,
+    offset_in_block: u64,
 }
 
 impl BlockReaderBuilder {
@@ -20,7 +20,7 @@ impl BlockReaderBuilder {
         Self {
             config,
             endpoint: "".to_string(),
-            block_offset: 0,
+            offset_in_block: 0,
         }
     }
 
@@ -30,7 +30,7 @@ impl BlockReaderBuilder {
     }
 
     pub fn with_offset(mut self, offset: u64) -> Self {
-        self.block_offset = offset;
+        self.offset_in_block = offset;
         self
     }
 
@@ -42,8 +42,24 @@ impl BlockReaderBuilder {
 
 struct RemoteBlockReader<S: Read + Write> {
     io_stream: S,
-    // offset in block
-    offset: u64,
+    offset_in_block: u64,
+    
+    bytes_to_read_remaining: u64,
+    
+    // Current packet
+    packet_receiver: PacketReceiver,
+    pos_in_packet: usize,
+}
+
+impl<S> RemoteBlockReader<S>
+where S: Read + Write
+{
+    fn cur_packet_available(&self) -> u64 {
+        self.packet_receiver
+            .data_slice()
+            .map(|s| s.len() - self.pos_in_packet)
+            .unwrap_or(0) as u64
+    }
 }
 
 impl<S> Read for RemoteBlockReader<S>

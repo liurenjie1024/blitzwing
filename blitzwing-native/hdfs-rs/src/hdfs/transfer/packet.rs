@@ -5,15 +5,18 @@ use bytes::{Buf, Bytes, BytesMut};
 use failure::ResultExt;
 use failure::_core::ops::Deref;
 use protobuf::{parse_from_bytes, parse_from_reader};
-use std::io::Read;
+use std::io::{Cursor, Read};
 use std::mem::size_of;
+use std::ops::Range;
 
 const BODY_LENGTH_LEN: usize = size_of::<u32>();
 const HEADER_LENGTH_LEN: usize = size_of::<u16>();
 const PACKET_LENGTHS_LEN: usize = BODY_LENGTH_LEN + HEADER_LENGTH_LEN;
 
+
 pub(super) struct PacketReceiver {
-    buffer: BytesMut,
+    buffer: Vec<u8>,
+    cur_packet_info: Option<PacketInfo>,
     eof: bool,
 }
 
@@ -23,35 +26,48 @@ pub(super) struct PacketHeader {
     proto: PacketHeaderProto,
 }
 
-#[derive(Debug, PartialEq)]
-pub(super) struct Packet<'a> {
+struct PacketInfo {
     header: PacketHeader,
-    checksum: &'a [u8],
-    data: &'a [u8],
+    data_idx: Range<usize>,
+    checksum_idx: Range<usize>,
+}
+
+impl PacketInfo {
+    fn data_slice_of<'a, S: AsRef<[u8]>>(&self, buffer: &'a S) -> &'a [u8] {
+        &buffer.as_ref()[self.data_idx.clone()]
+    }
+    
+    fn checksum_slice_of<'a, S: AsRef<[u8]>>(&self, buffer: &'a S) -> &'a [u8] {
+        &buffer.as_ref()[self.checksum_idx.clone()]
+    }
 }
 
 impl PacketReceiver {
     pub fn new() -> Self {
         Self {
-            buffer: BytesMut::with_capacity(PACKET_LENGTHS_LEN),
+            buffer: Vec::with_capacity(PACKET_LENGTHS_LEN),
+            cur_packet_info: None,
             eof: false,
         }
     }
 
-    pub fn next_packet<R: Read>(&mut self, stream: &mut R) -> Result<Option<Packet>> {
+    // This clears read pos
+    pub(super) fn next_packet<R: Read>(&mut self, stream: &mut R) -> Result<Option<&PacketHeader>> {
         if self.eof {
+            self.cur_packet_info = None;
             return Ok(None);
         }
-        unsafe {
-            self.buffer.set_len(PACKET_LENGTHS_LEN);
-        }
-
-        stream
-            .read_exact(self.buffer.as_mut())
+    
+        self.buffer.resize(PACKET_LENGTHS_LEN, 0);
+        stream.read_exact(&mut self.buffer)
             .context(HdfsLibErrorKind::IoError)?;
 
-        let body_len: usize = self.buffer.get_u32() as usize;
-        let header_len: usize = self.buffer.get_u16() as usize;
+        let (body_len, header_len) = {
+            let mut cursor = Cursor::new(self.buffer.as_slice());
+            let body_len = cursor.get_u32() as usize;
+            let header_len = cursor.get_u16() as usize;
+            (body_len, header_len)
+        };
 
         self.buffer.resize(
             PACKET_LENGTHS_LEN + header_len + body_len - BODY_LENGTH_LEN,
@@ -59,11 +75,11 @@ impl PacketReceiver {
         );
 
         stream
-            .read_exact(&mut self.buffer.as_mut()[PACKET_LENGTHS_LEN..])
+            .read_exact(&mut self.buffer[PACKET_LENGTHS_LEN..])
             .context(HdfsLibErrorKind::IoError)?;
 
         let header_proto = parse_from_bytes::<PacketHeaderProto>(
-            &self.buffer.bytes()[PACKET_LENGTHS_LEN..(PACKET_LENGTHS_LEN + header_len)],
+            &self.buffer[PACKET_LENGTHS_LEN..(PACKET_LENGTHS_LEN + header_len)],
         )
         .context(ProtobufError)?;
 
@@ -72,22 +88,31 @@ impl PacketReceiver {
 
         let checksum_start = PACKET_LENGTHS_LEN + header_len;
         let checksum_end = checksum_start + checksum_len;
-        let checksum = &self.buffer.as_ref()[checksum_start..checksum_end];
 
         let data_start = checksum_end;
         let data_end = data_start + data_len;
-        let data = &self.buffer.as_ref()[data_start..data_end];
-
+        
         self.eof = header_proto.get_lastPacketInBlock();
-
-        Ok(Some(Packet {
+        self.cur_packet_info = Some(PacketInfo {
             header: PacketHeader {
                 payload_len: (body_len - BODY_LENGTH_LEN) as u32,
                 proto: header_proto,
             },
-            checksum,
-            data,
-        }))
+            checksum_idx: checksum_start..checksum_end,
+            data_idx: data_start..data_end,
+        });
+        
+        Ok(self.cur_packet_info.as_ref().map(|p| &p.header))
+    }
+    
+    // data of current packet
+    pub(super) fn data_slice(&self) -> Option<&[u8]> {
+        self.cur_packet_info.as_ref().map(|p| p.data_slice_of(&self.buffer))
+    }
+    
+    // checksum of current packet
+    pub(super) fn checksum_slice(&self) -> Option<&[u8]> {
+        self.cur_packet_info.as_ref().map(|p| p.checksum_slice_of(&self.buffer))
     }
 }
 
@@ -138,34 +163,21 @@ mod tests {
     }
 
     struct TestPacketData {
-        packet_data: Rc<Vec<u8>>,
-        header: PacketHeader,
-        checksum_start: usize,
-        checksum_len: usize,
-        data_start: usize,
-        data_len: usize,
+        packet_data: Vec<u8>,
+        packet_info: PacketInfo,
     }
 
     impl TestPacketData {
-        fn add_offset(&self, offset: usize) -> Self {
-            Self {
-                packet_data: self.packet_data.clone(),
-                header: self.header.clone(),
-                checksum_start: self.checksum_start + offset,
-                checksum_len: self.checksum_len,
-                data_start: self.data_start + offset,
-                data_len: self.data_len,
-            }
+        fn header(&self) -> &PacketHeader {
+            &self.packet_info.header
         }
-
-        fn packet(&self) -> Packet {
-            let checksum_end = self.checksum_start + self.checksum_len;
-            let data_end = self.data_start + self.data_len;
-            Packet {
-                header: self.header.clone(),
-                checksum: &self.packet_data[self.checksum_start..checksum_end],
-                data: &self.packet_data[self.data_start..data_end],
-            }
+        
+        fn data_slice(&self) -> &[u8] {
+            self.packet_info.data_slice_of(&self.packet_data)
+        }
+        
+        fn checksum_slice(&self) -> &[u8] {
+            self.packet_info.checksum_slice_of(&self.packet_data)
         }
     }
 
@@ -179,15 +191,15 @@ mod tests {
         let checksum_start = packet_data.len() - checksum.len() - data.len();
         let data_start = packet_data.len() - data.len();
         TestPacketData {
-            packet_data: Rc::new(packet_data),
-            header: PacketHeader {
-                proto: header,
-                payload_len: (checksum.len() + data.len()) as u32,
-            },
-            checksum_start,
-            checksum_len: checksum.len(),
-            data_start,
-            data_len: data.len(),
+            packet_data,
+            packet_info: PacketInfo {
+                header: PacketHeader {
+                    proto: header,
+                    payload_len: (checksum.len() + data.len()) as u32,
+                },
+                checksum_idx: checksum_start..(checksum_start + checksum.len()),
+                data_idx: data_start..(data_start + data.len())
+            }
         }
     }
 
@@ -214,12 +226,14 @@ mod tests {
 
         // read before eof
         for i in 0..(test_packet_num - 1) {
-            let packet = packet_receiver
+            let packet_header = packet_receiver
                 .next_packet(&mut reader)
                 .expect(format!("Failed to read packet: {}.", i + 1).as_str())
                 .expect(format!("Packet {} should not be None.", i + 1).as_str());
 
-            assert_eq!(&test_packets[i].packet(), &packet);
+            assert_eq!(&test_packets[i].header(), &packet_header);
+            assert_eq!(Some(test_packets[i].data_slice()), packet_receiver.data_slice());
+            assert_eq!(Some(test_packets[i].checksum_slice()), packet_receiver.checksum_slice());
         }
 
         // Read after eof should be Ok(None)
@@ -227,5 +241,7 @@ mod tests {
             .next_packet(&mut reader)
             .expect("Read after eof should be ok!")
             .is_none());
+        assert!(packet_receiver.data_slice().is_none());
+        assert!(packet_receiver.checksum_slice().is_none());
     }
 }
