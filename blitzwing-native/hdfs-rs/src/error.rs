@@ -31,6 +31,8 @@ impl<'a> From<&'a RpcResponseHeaderProto> for RpcRemoteErrorInfo {
 pub enum HdfsLibErrorKind {
     #[fail(display = "Invalid argument: {}", _0)]
     InvalidArgumentError(String),
+    #[fail(display = "Illegal state: {}", _0)]
+    IllegalStateError(String),
     #[fail(display = "Protobuf error happened")]
     ProtobufError,
     #[fail(display = "System error happened: {}", _0)]
@@ -57,6 +59,8 @@ pub enum HdfsLibErrorKind {
     SyncError,
     #[fail(display = "Failed to parse configuration: {}", _0)]
     ConfigError(String),
+    #[fail(display = "Error happened in hdfs client protocol: {}", _0)]
+    ProtocolError(String),
 }
 
 impl HdfsLibError {
@@ -127,6 +131,25 @@ macro_rules! check_args {
 macro_rules! sys_err {
     ($fmt:expr, $($arg:tt)*) => {
         crate::error::HdfsLibError::from(crate::error::HdfsLibErrorKind::SystemError(format!($fmt, $($arg)*)))
+    };
+}
+
+
+macro_rules! check_protocol_content {
+    ($cond:expr) => {
+        if !($cond) {
+            return Err(crate::error::HdfsLibError::from(
+                crate::error::HdfsLibErrorKind::ProtocolError(
+                    format!("Condition check [{}] failed", stringify!($cond)))));
+        }
+    };
+    ($cond:expr, $fmt:expr, $($arg:tt)*) => {
+        if !($cond) {
+            return Err(crate::error::HdfsLibError::from(
+                crate::error::HdfsLibErrorKind::ProtocolError(
+                    format!("Condition check [{}] failed: {}", stringify!($cond), format!($fmt, $
+                    ($arg)*)))));
+        }
     };
 }
 

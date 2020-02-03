@@ -26,10 +26,35 @@ pub(super) struct PacketHeader {
     proto: PacketHeaderProto,
 }
 
+#[derive(Debug, PartialEq)]
+pub(super) struct Packet<'a> {
+    pub header: &'a PacketHeader,
+    pub data: &'a [u8],
+    pub checksum: &'a [u8],
+}
+
 struct PacketInfo {
     header: PacketHeader,
     data_idx: Range<usize>,
     checksum_idx: Range<usize>,
+}
+
+impl PacketHeader {
+    pub(super) fn offset_in_block(&self) -> u64 {
+        self.proto.get_offsetInBlock() as u64
+    }
+    
+    pub(super) fn seq_number(&self) -> i64 {
+        self.proto.get_seqno()
+    }
+    
+    pub(super) fn last_packet_in_block(&self) -> bool {
+        self.proto.get_lastPacketInBlock()
+    }
+    
+    pub(super) fn data_len(&self) -> u32 {
+        self.proto.get_dataLen() as u32
+    }
 }
 
 impl PacketInfo {
@@ -39,6 +64,20 @@ impl PacketInfo {
     
     fn checksum_slice_of<'a, S: AsRef<[u8]>>(&self, buffer: &'a S) -> &'a [u8] {
         &buffer.as_ref()[self.checksum_idx.clone()]
+    }
+}
+
+impl<'a> Packet<'a> {
+    pub fn sanity_check(&self) -> Result<()> {
+        if self.header.proto.get_lastPacketInBlock() {
+            check_protocol_content!(self.header.proto.get_dataLen() == 0,
+                "{}","Last packet should not contain data!")
+        } else {
+            check_protocol_content!(self.header.proto.get_dataLen() > 0,
+                "{}","Not last packet should contain data!")
+        }
+        
+        Ok(())
     }
 }
 
@@ -52,11 +91,8 @@ impl PacketReceiver {
     }
 
     // This clears read pos
-    pub(super) fn next_packet<R: Read>(&mut self, stream: &mut R) -> Result<Option<&PacketHeader>> {
-        if self.eof {
-            self.cur_packet_info = None;
-            return Ok(None);
-        }
+    pub(super) fn receive_next_packet<R: Read>(&mut self, stream: &mut R) -> Result<()> {
+        self.cur_packet_info = None;
     
         self.buffer.resize(PACKET_LENGTHS_LEN, 0);
         stream.read_exact(&mut self.buffer)
@@ -102,7 +138,16 @@ impl PacketReceiver {
             data_idx: data_start..data_end,
         });
         
-        Ok(self.cur_packet_info.as_ref().map(|p| &p.header))
+        Ok(())
+    }
+    
+    // current packet
+    pub(super) fn current_packet(&self) -> Option<Packet> {
+        self.cur_packet_info.as_ref().map(|p| Packet {
+            header: &p.header,
+            data: p.data_slice_of(&self.buffer),
+            checksum: p.checksum_slice_of(&self.buffer)
+        })
     }
     
     // data of current packet
@@ -113,6 +158,10 @@ impl PacketReceiver {
     // checksum of current packet
     pub(super) fn checksum_slice(&self) -> Option<&[u8]> {
         self.cur_packet_info.as_ref().map(|p| p.checksum_slice_of(&self.buffer))
+    }
+    
+    pub(super) fn header(&self) -> Option<&PacketHeader> {
+        self.cur_packet_info.as_ref().map(|p| &p.header)
     }
 }
 
@@ -227,7 +276,7 @@ mod tests {
         // read before eof
         for i in 0..(test_packet_num - 1) {
             let packet_header = packet_receiver
-                .next_packet(&mut reader)
+                .receive_next_packet(&mut reader)
                 .expect(format!("Failed to read packet: {}.", i + 1).as_str())
                 .expect(format!("Packet {} should not be None.", i + 1).as_str());
 
@@ -238,7 +287,7 @@ mod tests {
 
         // Read after eof should be Ok(None)
         assert!(packet_receiver
-            .next_packet(&mut reader)
+            .receive_next_packet(&mut reader)
             .expect("Read after eof should be ok!")
             .is_none());
         assert!(packet_receiver.data_slice().is_none());
