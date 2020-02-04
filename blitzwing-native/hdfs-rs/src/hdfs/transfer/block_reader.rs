@@ -45,9 +45,10 @@ impl BlockReaderBuilder {
     }
 }
 
-struct RemoteBlockReader<S: Read + Write> {
+struct RemoteBlockReader<IN, OUT> {
     // These fields should not be changed after initialization
-    io_stream: S,
+    input: IN,
+    output: OUT,
     offset_in_block: u64,
     verify_checksum: bool,
     bytes_per_checksum: usize,
@@ -63,8 +64,9 @@ struct RemoteBlockReader<S: Read + Write> {
     pos_in_packet: usize,
 }
 
-impl<S> RemoteBlockReader<S>
-where S: Read + Write
+impl<IN, OUT> RemoteBlockReader<IN, OUT>
+where IN: Read,
+      OUT: Write,
 {
     fn bytes_left_in_current_packet(&self) -> u64 {
         self.packet_receiver
@@ -83,7 +85,7 @@ where S: Read + Write
     }
 
     fn read_next_packet(&mut self) -> Result<()> {
-        self.packet_receiver.receive_next_packet(&mut self.io_stream)?;
+        self.packet_receiver.receive_next_packet(&mut self.input)?;
     
         let packet = self.current_packet()?;
         let packet_offset_in_block = packet.header.offset_in_block();
@@ -142,19 +144,20 @@ where S: Read + Write
         let mut read_status = ClientReadStatusProto::new();
         read_status.set_status(status);
         
-        read_status.write_length_delimited_to_writer(&mut self.io_stream)
+        read_status.write_length_delimited_to_writer(&mut self.output)
             .context(HdfsLibErrorKind::ProtobufError)?;
         
-        self.io_stream.flush()
+        self.output.flush()
             .context(HdfsLibErrorKind::IoError)?;
         Ok(())
     }
     
 }
 
-impl<S> Read for RemoteBlockReader<S>
+impl<IN, OUT> Read for RemoteBlockReader<IN, OUT>
 where
-    S: Read + Write,
+    IN: Read,
+    OUT: Write,
 {
     fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
         self.do_read(buf)
@@ -162,9 +165,11 @@ where
     }
 }
 
-impl<S> BlockReader for RemoteBlockReader<S>
+
+impl<IN, OUT> RemoteBlockReader<IN, OUT>
 where
-    S: Read + Write,
+    IN: Read,
+    OUT: Write,
 {
     fn skip(&mut self, n: usize) -> Result<usize> {
         let skip_buffer = unsafe {
