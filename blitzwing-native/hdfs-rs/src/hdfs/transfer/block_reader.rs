@@ -6,6 +6,7 @@ use std::cmp::min;
 use crate::hadoop_proto::datatransfer::{Status, ClientReadStatusProto};
 use protobuf::Message;
 use failure::ResultExt;
+use failure::_core::cell::{RefCell, UnsafeCell};
 
 pub(super) type BlockReaderRef = Box<dyn BlockReader>;
 
@@ -55,7 +56,7 @@ struct RemoteBlockReader<S: Read + Write> {
     last_seq_num: i64,
     bytes_to_read_remaining: u64,
     
-    skip_buffer: Vec<u8>,
+    skip_buffer: UnsafeCell<Vec<u8>>,
     
     // Current packet
     packet_receiver: PacketReceiver,
@@ -67,8 +68,8 @@ where S: Read + Write
 {
     fn bytes_left_in_current_packet(&self) -> u64 {
         self.packet_receiver
-            .data_slice()
-            .map(|s| s.len() - self.pos_in_packet)
+            .current_packet()
+            .map(|p| p.data.len() - self.pos_in_packet)
             .unwrap_or(0) as u64
     }
     
@@ -89,19 +90,22 @@ where S: Read + Write
     
         // Sanity check
         packet.sanity_check()?;
+        
+        let cur_packet_data_len = packet.header.data_len() as u64;
+        let cur_packet_seq_num = packet.header.seq_number();
     
         if packet.header.data_len() > 0 {
-            check_protocol_content!((self.last_seq_num + 1) == packet.header.seq_num());
+            check_protocol_content!((self.last_seq_num + 1) == cur_packet_seq_num );
             // TODO: Verify checksum
         
-            self.bytes_to_read_remaining -= packet.header.data_len() as u64;
+            self.bytes_to_read_remaining -= cur_packet_data_len;
             self.pos_in_packet = 0;
             if packet_offset_in_block < self.offset_in_block {
-                self.pos_in_packet = self.offset_in_block - packet_offset_in_block;
+                self.pos_in_packet = (self.offset_in_block - packet_offset_in_block) as usize;
             }
         }
     
-        self.last_seq_num = packet.header.seq_number();
+        self.last_seq_num = cur_packet_seq_num;
         Ok(())
     }
     
@@ -141,7 +145,8 @@ where S: Read + Write
         read_status.write_length_delimited_to_writer(&mut self.io_stream)
             .context(HdfsLibErrorKind::ProtobufError)?;
         
-        self.io_stream.flush()?;
+        self.io_stream.flush()
+            .context(HdfsLibErrorKind::IoError)?;
         Ok(())
     }
     
@@ -162,12 +167,16 @@ where
     S: Read + Write,
 {
     fn skip(&mut self, n: usize) -> Result<usize> {
-        self.skip_buffer.resize(self.bytes_per_checksum, 0);
+        let skip_buffer = unsafe {
+            &mut *self.skip_buffer.get()
+        };
+        skip_buffer.resize(self.bytes_per_checksum, 0);
+        
         
         let mut bytes_skipped = 0;
         while bytes_skipped < n {
             let bytes_to_read = min(n - bytes_skipped, self.bytes_per_checksum);
-            let bytes_read = self.do_read(&mut self.skip_buffer.as_mut_slice()[0..bytes_to_read])?;
+            let bytes_read = self.do_read(&mut skip_buffer.as_mut_slice()[0..bytes_to_read])?;
             
             if bytes_read == 0 {
                 return Ok(bytes_skipped);

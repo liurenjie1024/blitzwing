@@ -58,12 +58,12 @@ impl PacketHeader {
 }
 
 impl PacketInfo {
-    fn data_slice_of<'a, S: AsRef<[u8]>>(&self, buffer: &'a S) -> &'a [u8] {
-        &buffer.as_ref()[self.data_idx.clone()]
-    }
-    
-    fn checksum_slice_of<'a, S: AsRef<[u8]>>(&self, buffer: &'a S) -> &'a [u8] {
-        &buffer.as_ref()[self.checksum_idx.clone()]
+    fn packet_of<'a, S: AsRef<[u8]>>(&'a self, buffer: &'a S) -> Packet<'a> {
+        Packet {
+            header: &self.header,
+            data: &buffer.as_ref()[self.data_idx.clone()],
+            checksum: &buffer.as_ref()[self.checksum_idx.clone()]
+        }
     }
 }
 
@@ -143,25 +143,7 @@ impl PacketReceiver {
     
     // current packet
     pub(super) fn current_packet(&self) -> Option<Packet> {
-        self.cur_packet_info.as_ref().map(|p| Packet {
-            header: &p.header,
-            data: p.data_slice_of(&self.buffer),
-            checksum: p.checksum_slice_of(&self.buffer)
-        })
-    }
-    
-    // data of current packet
-    pub(super) fn data_slice(&self) -> Option<&[u8]> {
-        self.cur_packet_info.as_ref().map(|p| p.data_slice_of(&self.buffer))
-    }
-    
-    // checksum of current packet
-    pub(super) fn checksum_slice(&self) -> Option<&[u8]> {
-        self.cur_packet_info.as_ref().map(|p| p.checksum_slice_of(&self.buffer))
-    }
-    
-    pub(super) fn header(&self) -> Option<&PacketHeader> {
-        self.cur_packet_info.as_ref().map(|p| &p.header)
+        self.cur_packet_info.as_ref().map(|p| p.packet_of(&self.buffer))
     }
 }
 
@@ -217,16 +199,8 @@ mod tests {
     }
 
     impl TestPacketData {
-        fn header(&self) -> &PacketHeader {
-            &self.packet_info.header
-        }
-        
-        fn data_slice(&self) -> &[u8] {
-            self.packet_info.data_slice_of(&self.packet_data)
-        }
-        
-        fn checksum_slice(&self) -> &[u8] {
-            self.packet_info.checksum_slice_of(&self.packet_data)
+        fn packet(&self) -> Packet {
+            self.packet_info.packet_of(&self.packet_data)
         }
     }
 
@@ -273,24 +247,12 @@ mod tests {
 
         let mut reader = Cursor::new(packet_data);
 
-        // read before eof
-        for i in 0..(test_packet_num - 1) {
-            let packet_header = packet_receiver
+        for i in 0..test_packet_num {
+            packet_receiver
                 .receive_next_packet(&mut reader)
-                .expect(format!("Failed to read packet: {}.", i + 1).as_str())
-                .expect(format!("Packet {} should not be None.", i + 1).as_str());
+                .expect(format!("Failed to read packet: {}.", i + 1).as_str());
 
-            assert_eq!(&test_packets[i].header(), &packet_header);
-            assert_eq!(Some(test_packets[i].data_slice()), packet_receiver.data_slice());
-            assert_eq!(Some(test_packets[i].checksum_slice()), packet_receiver.checksum_slice());
+            assert_eq!(Some(test_packets[i].packet()), packet_receiver.current_packet());
         }
-
-        // Read after eof should be Ok(None)
-        assert!(packet_receiver
-            .receive_next_packet(&mut reader)
-            .expect("Read after eof should be ok!")
-            .is_none());
-        assert!(packet_receiver.data_slice().is_none());
-        assert!(packet_receiver.checksum_slice().is_none());
     }
 }
