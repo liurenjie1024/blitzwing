@@ -9,9 +9,9 @@ use crate::hadoop_proto::ClientNamenodeProtocol::{
 use crate::hadoop_proto::ProtobufRpcEngine::RequestHeaderProto;
 use crate::hdfs::block::LocatedBlocks;
 use crate::rpc::rpc_client::RpcClientRef;
-use std::sync::Arc;
 use crate::utils::proto::ProtobufTranslate;
 use std::convert::TryFrom;
+use std::sync::Arc;
 
 pub type ClientProtocolRef = Arc<dyn ClientProtocol>;
 

@@ -1,4 +1,4 @@
-use crate::error::{Result};
+use crate::error::Result;
 use crate::hadoop_proto::hdfs::{DatanodeIDProto, DatanodeInfoProto};
 
 use crate::utils::proto::ProtobufTranslate;
@@ -36,7 +36,7 @@ impl DatanodeInfoWithStorage {
     pub fn datanode_info(&self) -> DatanodeInfo {
         self.datanode_info.clone()
     }
-    
+
     pub fn storage_id(&self) -> &str {
         self.storage_id.as_str()
     }
@@ -54,7 +54,7 @@ impl ProtobufTranslate<DatanodeIDProto> for DatanodeId {
             datanode_uuid: proto.get_datanodeUuid().to_string(),
         })
     }
-    
+
     fn try_write_to(&self) -> Result<DatanodeIDProto> {
         let mut proto = DatanodeIDProto::new();
         proto.set_ipAddr(self.ip_addr.clone());
@@ -64,7 +64,7 @@ impl ProtobufTranslate<DatanodeIDProto> for DatanodeId {
         proto.set_infoSecurePort(self.info_secure_port);
         proto.set_ipcPort(self.ipc_port);
         proto.set_datanodeUuid(self.datanode_uuid.clone());
-        
+
         Ok(proto)
     }
 }
@@ -72,14 +72,14 @@ impl ProtobufTranslate<DatanodeIDProto> for DatanodeId {
 impl ProtobufTranslate<DatanodeInfoProto> for DatanodeInfo {
     fn try_read_from(proto: &DatanodeInfoProto) -> Result<Self> {
         Ok(Self {
-            datanode_id: DatanodeId::try_read_from(proto.get_id())?
+            datanode_id: DatanodeId::try_read_from(proto.get_id())?,
         })
     }
-    
+
     fn try_write_to(&self) -> Result<DatanodeInfoProto> {
         let mut proto = DatanodeInfoProto::new();
         proto.set_id(self.datanode_id.try_write_to()?);
-        
+
         Ok(proto)
     }
 }

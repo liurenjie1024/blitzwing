@@ -1,5 +1,5 @@
 use crate::config::ConfigRef;
-use crate::error::{Result};
+use crate::error::Result;
 
 use std::sync::Arc;
 

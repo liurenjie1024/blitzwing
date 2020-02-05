@@ -1,10 +1,10 @@
 use crate::error::HdfsLibErrorKind::ProtobufError;
 use crate::error::{HdfsLibErrorKind, Result};
 use crate::hadoop_proto::datatransfer::PacketHeaderProto;
-use bytes::{Buf};
+use bytes::Buf;
 use failure::ResultExt;
 
-use protobuf::{parse_from_bytes};
+use protobuf::parse_from_bytes;
 use std::io::{Cursor, Read};
 use std::mem::size_of;
 use std::ops::Range;
@@ -12,7 +12,6 @@ use std::ops::Range;
 const BODY_LENGTH_LEN: usize = size_of::<u32>();
 const HEADER_LENGTH_LEN: usize = size_of::<u16>();
 const PACKET_LENGTHS_LEN: usize = BODY_LENGTH_LEN + HEADER_LENGTH_LEN;
-
 
 pub(super) struct PacketReceiver {
     buffer: Vec<u8>,
@@ -42,15 +41,15 @@ impl PacketHeader {
     pub(super) fn offset_in_block(&self) -> u64 {
         self.proto.get_offsetInBlock() as u64
     }
-    
+
     pub(super) fn seq_number(&self) -> i64 {
         self.proto.get_seqno()
     }
-    
+
     pub(super) fn last_packet_in_block(&self) -> bool {
         self.proto.get_lastPacketInBlock()
     }
-    
+
     pub(super) fn data_len(&self) -> u32 {
         self.proto.get_dataLen() as u32
     }
@@ -61,7 +60,7 @@ impl PacketInfo {
         Packet {
             header: &self.header,
             data: &buffer.as_ref()[self.data_idx.clone()],
-            checksum: &buffer.as_ref()[self.checksum_idx.clone()]
+            checksum: &buffer.as_ref()[self.checksum_idx.clone()],
         }
     }
 }
@@ -69,13 +68,19 @@ impl PacketInfo {
 impl<'a> Packet<'a> {
     pub fn sanity_check(&self) -> Result<()> {
         if self.header.proto.get_lastPacketInBlock() {
-            check_protocol_content!(self.header.proto.get_dataLen() == 0,
-                "{}","Last packet should not contain data!")
+            check_protocol_content!(
+                self.header.proto.get_dataLen() == 0,
+                "{}",
+                "Last packet should not contain data!"
+            )
         } else {
-            check_protocol_content!(self.header.proto.get_dataLen() > 0,
-                "{}","Not last packet should contain data!")
+            check_protocol_content!(
+                self.header.proto.get_dataLen() > 0,
+                "{}",
+                "Not last packet should contain data!"
+            )
         }
-        
+
         Ok(())
     }
 }
@@ -91,9 +96,10 @@ impl PacketReceiver {
     // This clears read pos
     pub(super) fn receive_next_packet<R: Read>(&mut self, stream: &mut R) -> Result<()> {
         self.cur_packet_info = None;
-    
+
         self.buffer.resize(PACKET_LENGTHS_LEN, 0);
-        stream.read_exact(&mut self.buffer)
+        stream
+            .read_exact(&mut self.buffer)
             .context(HdfsLibErrorKind::IoError)?;
 
         let (body_len, header_len) = {
@@ -125,7 +131,7 @@ impl PacketReceiver {
 
         let data_start = checksum_end;
         let data_end = data_start + data_len;
-        
+
         self.cur_packet_info = Some(PacketInfo {
             header: PacketHeader {
                 payload_len: (body_len - BODY_LENGTH_LEN) as u32,
@@ -134,13 +140,15 @@ impl PacketReceiver {
             checksum_idx: checksum_start..checksum_end,
             data_idx: data_start..data_end,
         });
-        
+
         Ok(())
     }
-    
+
     // current packet
     pub(super) fn current_packet(&self) -> Option<Packet> {
-        self.cur_packet_info.as_ref().map(|p| p.packet_of(&self.buffer))
+        self.cur_packet_info
+            .as_ref()
+            .map(|p| p.packet_of(&self.buffer))
     }
 }
 
@@ -153,7 +161,6 @@ mod tests {
     use protobuf::Message;
     use std::io::prelude::*;
     use std::io::Cursor;
-    
 
     fn make_packet_header(
         data_len: i32,
@@ -218,8 +225,8 @@ mod tests {
                     payload_len: (checksum.len() + data.len()) as u32,
                 },
                 checksum_idx: checksum_start..(checksum_start + checksum.len()),
-                data_idx: data_start..(data_start + data.len())
-            }
+                data_idx: data_start..(data_start + data.len()),
+            },
         }
     }
 
@@ -249,7 +256,10 @@ mod tests {
                 .receive_next_packet(&mut reader)
                 .expect(format!("Failed to read packet: {}.", i + 1).as_str());
 
-            assert_eq!(Some(test_packets[i].packet()), packet_receiver.current_packet());
+            assert_eq!(
+                Some(test_packets[i].packet()),
+                packet_receiver.current_packet()
+            );
         }
     }
 }

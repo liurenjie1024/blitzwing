@@ -1,13 +1,14 @@
+use crate::error::{BlockOpErrorInfo, HdfsLibErrorKind, Result};
+use crate::hadoop_proto::datatransfer::{
+    BaseHeaderProto, BlockOpResponseProto, ClientOperationHeaderProto, OpReadBlockProto, Status,
+};
 use crate::hdfs::block::ExtendedBlock;
-use crate::error::{Result, HdfsLibErrorKind, BlockOpErrorInfo};
-use std::io::{Write, Read};
-use protobuf::Message;
-use std::mem::{size_of};
+use crate::utils::proto::{parse_delimited_message, ProtobufTranslate};
 use bytes::BufMut;
 use failure::ResultExt;
-use crate::hadoop_proto::datatransfer::{OpReadBlockProto, BaseHeaderProto,
-                                        ClientOperationHeaderProto, BlockOpResponseProto, Status};
-use crate::utils::proto::{ProtobufTranslate, parse_delimited_message};
+use protobuf::Message;
+use std::io::{Read, Write};
+use std::mem::size_of;
 
 /// Operations codes
 const OP_WRITE_BLOCK: u8 = 80;
@@ -49,7 +50,7 @@ pub struct ReadBlockRequest {
 #[get_copy = "pub"]
 pub struct ReadBlockResponse {
     first_chunk_offset: u64,
-    bytes_per_checksum: u64
+    bytes_per_checksum: u64,
 }
 
 pub struct DataTransferProtocol<'a, IN: Read, OUT: Write> {
@@ -57,62 +58,64 @@ pub struct DataTransferProtocol<'a, IN: Read, OUT: Write> {
     output: &'a mut OUT,
 }
 
-
 impl<'a, IN: Read, OUT: Write> DataTransferProtocol<'a, IN, OUT> {
     fn send<M: Message>(&mut self, op: u8, message: M) -> Result<()> {
         // We add 8 here because we need to include serialized message length
-        let mut buffer: Vec<u8> = Vec::with_capacity(request_header_size() +
-            8 + message.compute_size() as usize);
-        
+        let mut buffer: Vec<u8> =
+            Vec::with_capacity(request_header_size() + 8 + message.compute_size() as usize);
+
         buffer.put_i16(DATA_TRANSFER_VERSION);
         buffer.put_u8(op);
-        message.write_length_delimited_to_writer(&mut buffer)
+        message
+            .write_length_delimited_to_writer(&mut buffer)
             .context(HdfsLibErrorKind::ProtobufError)?;
-        
-        self.output.write(&buffer)
+
+        self.output
+            .write(&buffer)
             .context(HdfsLibErrorKind::IoError)?;
-        self.output.flush()
-            .context(HdfsLibErrorKind::IoError)?;
-        
+        self.output.flush().context(HdfsLibErrorKind::IoError)?;
+
         Ok(())
     }
 }
 
 impl<'a, IN: Read, OUT: Write> DataTransferProtocol<'a, IN, OUT> {
     pub fn new(input: &'a mut IN, output: &'a mut OUT) -> Self {
-        Self {
-            input,
-            output
-        }
+        Self { input, output }
     }
-    
+
     pub fn read_block(&mut self, request: ReadBlockRequest) -> Result<ReadBlockResponse> {
         let mut proto = OpReadBlockProto::new();
-        proto.set_header(build_client_operation_header(&request.base_info.block,
-                                                       request.client_name.as_str())?);
+        proto.set_header(build_client_operation_header(
+            &request.base_info.block,
+            request.client_name.as_str(),
+        )?);
         proto.set_offset(request.start_offset_in_block);
         proto.set_len(request.bytes_to_read);
         proto.set_sendChecksums(request.send_checksum);
-        
+
         self.send(OP_READ_BLOCK, proto)?;
-        
+
         let response_proto: BlockOpResponseProto = parse_delimited_message(&mut self.input)?;
-        
+
         check_block_operation_response(&request.base_info, &response_proto)?;
-    
-        
+
         let checksum_info = response_proto.get_readOpChecksumInfo();
-        
+
         let bytes_per_checksum = checksum_info.get_checksum().get_bytesPerChecksum() as u64;
         let first_chunk_offset = checksum_info.get_chunkOffset();
-        
-        check_protocol_content!(first_chunk_offset <= request.start_offset_in_block &&
-        (first_chunk_offset + bytes_per_checksum) > request.start_offset_in_block,
-        "Block reader error in first chunk offset: [{:?}], bytes_per_check_sum: [{}], \
-        first chunk offset: [{}], start offset in block: [{}]", &request.base_info,
-        bytes_per_checksum,
-        first_chunk_offset, request.start_offset_in_block);
-        
+
+        check_protocol_content!(
+            first_chunk_offset <= request.start_offset_in_block
+                && (first_chunk_offset + bytes_per_checksum) > request.start_offset_in_block,
+            "Block reader error in first chunk offset: [{:?}], bytes_per_check_sum: [{}], \
+        first chunk offset: [{}], start offset in block: [{}]",
+            &request.base_info,
+            bytes_per_checksum,
+            first_chunk_offset,
+            request.start_offset_in_block
+        );
+
         Ok(ReadBlockResponse {
             first_chunk_offset,
             bytes_per_checksum,
@@ -123,31 +126,31 @@ impl<'a, IN: Read, OUT: Write> DataTransferProtocol<'a, IN, OUT> {
 fn build_base_header(block: &ExtendedBlock) -> Result<BaseHeaderProto> {
     let mut proto = BaseHeaderProto::new();
     proto.set_block(block.try_write_to()?);
-    
+
     Ok(proto)
 }
 
-fn build_client_operation_header(block: &ExtendedBlock, client_name: &str)
-    -> Result<ClientOperationHeaderProto> {
+fn build_client_operation_header(
+    block: &ExtendedBlock,
+    client_name: &str,
+) -> Result<ClientOperationHeaderProto> {
     let mut proto = ClientOperationHeaderProto::new();
     proto.set_baseHeader(build_base_header(block)?);
     proto.set_clientName(client_name.to_string());
-    
+
     Ok(proto)
 }
 
-fn check_block_operation_response(base_info: &BaseBlockOpInfo, response: &BlockOpResponseProto)
-    -> Result<()> {
+fn check_block_operation_response(
+    base_info: &BaseBlockOpInfo,
+    response: &BlockOpResponseProto,
+) -> Result<()> {
     match response.get_status() {
         Status::SUCCESS => Ok(()),
-        _ => {
-            Err(BlockOpErrorInfo::new(base_info.clone(), response).to_err())
-        }
+        _ => Err(BlockOpErrorInfo::new(base_info.clone(), response).to_err()),
     }
 }
 
 const fn request_header_size() -> usize {
     size_of::<u8>() + size_of::<i16>()
 }
-
-
