@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 extern crate hdfs_rs;
 extern crate log4rs;
 #[macro_use]

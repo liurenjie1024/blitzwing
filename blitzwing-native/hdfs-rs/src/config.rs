@@ -1,6 +1,6 @@
 use crate::error::Result;
 use crate::error::{HdfsLibError, HdfsLibErrorKind};
-use failure::{Fail, ResultExt};
+use failure::Fail;
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;

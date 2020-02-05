@@ -4,7 +4,7 @@ use crate::fs::input_stream::FsInputStream;
 use crate::hdfs::block::LocatedBlocks;
 use crate::hdfs::datanode::DatanodeInfo;
 use crate::hdfs::hdfs_config::HdfsClientConfigRef;
-use crate::hdfs::protocol::client_protocol::{ClientProtocol, ClientProtocolRef};
+use crate::hdfs::protocol::client_protocol::ClientProtocolRef;
 use crate::hdfs::transfer::block_reader::{BlockReaderRef};
 use std::io::{Error as IoError, Read, Seek, SeekFrom};
 use std::result::Result as StdResult;
