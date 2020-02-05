@@ -17,7 +17,6 @@ const PACKET_LENGTHS_LEN: usize = BODY_LENGTH_LEN + HEADER_LENGTH_LEN;
 pub(super) struct PacketReceiver {
     buffer: Vec<u8>,
     cur_packet_info: Option<PacketInfo>,
-    eof: bool,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -86,7 +85,6 @@ impl PacketReceiver {
         Self {
             buffer: Vec::with_capacity(PACKET_LENGTHS_LEN),
             cur_packet_info: None,
-            eof: false,
         }
     }
 
@@ -128,7 +126,6 @@ impl PacketReceiver {
         let data_start = checksum_end;
         let data_end = data_start + data_len;
         
-        self.eof = header_proto.get_lastPacketInBlock();
         self.cur_packet_info = Some(PacketInfo {
             header: PacketHeader {
                 payload_len: (body_len - BODY_LENGTH_LEN) as u32,

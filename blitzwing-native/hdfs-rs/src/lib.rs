@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 extern crate async_trait;
 extern crate bytes;
 #[macro_use]
@@ -10,6 +12,10 @@ extern crate url;
 #[macro_use]
 extern crate lazy_static;
 extern crate uuid;
+#[macro_use]
+extern crate derive_new;
+#[macro_use]
+extern crate getset;
 
 pub mod config;
 #[macro_use]
@@ -19,3 +25,4 @@ pub mod hadoop_proto;
 pub mod hdfs;
 pub mod rpc;
 pub mod rt;
+pub mod utils;

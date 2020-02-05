@@ -1,10 +1,12 @@
 use crate::error::{HdfsLibError, HdfsLibErrorKind, Result};
-use crate::hadoop_proto::hdfs::{ExtendedBlockProto, LocatedBlockProto, LocatedBlocksProto};
+use crate::hadoop_proto::hdfs::{ExtendedBlockProto, LocatedBlockProto, LocatedBlocksProto, DatanodeInfoProto};
 use crate::hdfs::block::OffsetOrRange::{Offset, Range as ORange};
 use crate::hdfs::datanode::{DatanodeInfo, DatanodeInfoWithStorage};
 use failure::_core::cmp::Ordering;
 use std::convert::TryFrom;
 use std::ops::Range;
+use crate::utils::proto::ProtobufTranslate;
+use protobuf::RepeatedField;
 
 #[derive(Debug, Clone)]
 pub struct LocatedBlocks {
@@ -24,13 +26,13 @@ pub struct LocatedBlock {
     corrupt: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ExtendedBlock {
     pool_id: String,
     block: Block,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Block {
     block_id: u64,
     num_bytes: u64,
@@ -96,6 +98,7 @@ impl Ord for OffsetOrRange {
         }
     }
 }
+
 
 impl LocatedBlocks {
     pub fn get_file_len(&self) -> u64 {
@@ -173,53 +176,9 @@ impl LocatedBlock {
     }
 }
 
-impl TryFrom<&'_ LocatedBlocksProto> for LocatedBlocks {
-    type Error = HdfsLibError;
 
-    fn try_from(proto: &'_ LocatedBlocksProto) -> Result<Self> {
-        Ok(Self {
-            file_len: proto.get_fileLength(),
-            blocks: proto
-                .get_blocks()
-                .iter()
-                .map(LocatedBlock::try_from)
-                .collect::<Result<Vec<LocatedBlock>>>()?,
-            under_construction: proto.get_underConstruction(),
-            last_located_block: None,
-            last_block_complete: proto.get_isLastBlockComplete(),
-        })
-    }
-}
-
-impl TryFrom<&'_ LocatedBlockProto> for LocatedBlock {
-    type Error = HdfsLibError;
-
-    fn try_from(proto: &LocatedBlockProto) -> Result<Self> {
-        check_args!(proto.get_locs().len() == proto.get_storageIDs().len());
-
-        let locations = proto
-            .get_locs()
-            .iter()
-            .zip(proto.get_storageIDs())
-            .map(|(datanode_info_proto, storage_id)| {
-                DatanodeInfo::try_from(datanode_info_proto)
-                    .map(|datanode| DatanodeInfoWithStorage::new(datanode, storage_id))
-            })
-            .collect::<Result<Vec<DatanodeInfoWithStorage>>>()?;
-
-        Ok(Self {
-            block: ExtendedBlock::try_from(proto.get_b())?,
-            offset: proto.get_offset(),
-            locations,
-            corrupt: proto.get_corrupt(),
-        })
-    }
-}
-
-impl TryFrom<&'_ ExtendedBlockProto> for ExtendedBlock {
-    type Error = HdfsLibError;
-
-    fn try_from(proto: &ExtendedBlockProto) -> Result<Self> {
+impl ProtobufTranslate<ExtendedBlockProto> for ExtendedBlock {
+    fn try_read_from(proto: &ExtendedBlockProto) -> Result<Self> {
         Ok(Self {
             pool_id: proto.get_poolId().to_string(),
             block: Block {
@@ -229,7 +188,94 @@ impl TryFrom<&'_ ExtendedBlockProto> for ExtendedBlock {
             },
         })
     }
+    
+    fn try_write_to(&self) -> Result<ExtendedBlockProto> {
+        let mut proto = ExtendedBlockProto::new();
+        proto.set_poolId(self.pool_id.clone());
+        proto.set_blockId(self.block.block_id);
+        proto.set_numBytes(self.block.num_bytes);
+        proto.set_generationStamp(self.block.generation_stamp);
+        
+        Ok(proto)
+    }
 }
+
+
+impl ProtobufTranslate<LocatedBlockProto> for LocatedBlock {
+    fn try_read_from(proto: &LocatedBlockProto) -> Result<Self> {
+        check_args!(proto.get_locs().len() == proto.get_storageIDs().len());
+        
+        let locations = proto
+            .get_locs()
+            .iter()
+            .zip(proto.get_storageIDs())
+            .map(|(datanode_info_proto, storage_id)| {
+                DatanodeInfo::try_read_from(datanode_info_proto)
+                    .map(|datanode| DatanodeInfoWithStorage::new(datanode, storage_id))
+            })
+            .collect::<Result<Vec<DatanodeInfoWithStorage>>>()?;
+        
+        Ok(Self {
+            block: ExtendedBlock::try_read_from(proto.get_b())?,
+            offset: proto.get_offset(),
+            locations,
+            corrupt: proto.get_corrupt(),
+        })
+    }
+    
+    fn try_write_to(&self) -> Result<LocatedBlockProto> {
+        let mut proto = LocatedBlockProto::new();
+        proto.set_b(self.block.try_write_to()?);
+        proto.set_offset(self.offset);
+        
+        let storage_ids: Vec<String> = self.locations.iter()
+            .map(|loc| loc.storage_id().to_string())
+            .collect();
+        proto.set_storageIDs(storage_ids.into());
+        
+        let datanode_info: Result<Vec<DatanodeInfoProto>>  = self.locations.iter()
+            .map(|dn| dn.datanode_info().try_write_to())
+            .collect();
+        proto.set_locs(RepeatedField::from_vec(datanode_info?));
+        
+        proto.set_corrupt(self.corrupt);
+        
+        Ok(proto)
+    }
+}
+
+impl ProtobufTranslate<LocatedBlocksProto> for LocatedBlocks {
+    fn try_read_from(proto: &LocatedBlocksProto) -> Result<Self> {
+        Ok(Self {
+            file_len: proto.get_fileLength(),
+            blocks: proto
+                .get_blocks()
+                .iter()
+                .map(LocatedBlock::try_read_from)
+                .collect::<Result<Vec<LocatedBlock>>>()?,
+            under_construction: proto.get_underConstruction(),
+            last_located_block: None,
+            last_block_complete: proto.get_isLastBlockComplete(),
+        })
+    }
+    
+    fn try_write_to(&self) -> Result<LocatedBlocksProto> {
+        let mut proto = LocatedBlocksProto::new();
+        
+        proto.set_fileLength(self.file_len);
+        
+        let blocks = self.blocks.iter()
+            .map(LocatedBlock::try_write_to)
+            .collect::<Result<Vec<LocatedBlockProto>>>()?;
+        proto.set_blocks(blocks.into());
+        
+        proto.set_underConstruction(self.under_construction);
+        proto.set_isLastBlockComplete(self.last_block_complete);
+        
+        Ok(proto)
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

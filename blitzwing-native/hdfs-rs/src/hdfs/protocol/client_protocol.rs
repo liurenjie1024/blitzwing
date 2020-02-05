@@ -9,8 +9,9 @@ use crate::hadoop_proto::ClientNamenodeProtocol::{
 use crate::hadoop_proto::ProtobufRpcEngine::RequestHeaderProto;
 use crate::hdfs::block::LocatedBlocks;
 use crate::rpc::rpc_client::RpcClientRef;
-use std::convert::TryFrom;
 use std::sync::Arc;
+use crate::utils::proto::ProtobufTranslate;
+use std::convert::TryFrom;
 
 pub type ClientProtocolRef = Arc<dyn ClientProtocol>;
 
@@ -54,7 +55,7 @@ impl ClientProtocol for RpcClientProtocol {
             .call::<GetBlockLocationsRequestProto, GetBlockLocationsResponseProto>(header, body)
             .and_then(|resp| {
                 if resp.has_locations() {
-                    LocatedBlocks::try_from(resp.get_locations())
+                    LocatedBlocks::try_read_from(resp.get_locations())
                 } else {
                     Err(SystemError(
                         "Get block locations response doesn't have locations!".to_string(),

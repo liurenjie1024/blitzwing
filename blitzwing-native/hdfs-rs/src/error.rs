@@ -4,6 +4,9 @@ use crate::hadoop_proto::RpcHeader::{
 use failure::{Backtrace, Context, Fail};
 use std::fmt::{Display, Formatter};
 use std::time::Duration;
+use crate::hdfs::block::ExtendedBlock;
+use crate::hdfs::transfer::data_transfer_protocol::BaseBlockOpInfo;
+use crate::hadoop_proto::datatransfer::{BlockOpResponseProto, Status as BlockOpStatus};
 
 #[derive(Debug)]
 pub struct HdfsLibError {
@@ -24,6 +27,33 @@ impl<'a> From<&'a RpcResponseHeaderProto> for RpcRemoteErrorInfo {
             message: header.get_errorMsg().to_string(),
             error_code: header.get_errorDetail(),
         }
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct BlockOpErrorInfo {
+    // TODO: Add local and remote add info
+    base_info: BaseBlockOpInfo,
+    status: BlockOpStatus,
+    message: String,
+}
+
+impl BlockOpErrorInfo {
+    pub fn new(base_info: BaseBlockOpInfo, response: &BlockOpResponseProto) -> Self {
+        Self {
+            base_info,
+            status: response.get_status(),
+            message: response.get_message().to_string()
+        }
+    }
+    
+    pub fn to_err(self) -> HdfsLibError {
+        let error_kind = match self.status {
+            BlockOpStatus::ERROR_ACCESS_TOKEN => HdfsLibErrorKind::InvalidBlockTokenError(self),
+            _ => HdfsLibErrorKind::BlockOperationError(self),
+        };
+        
+        HdfsLibError::from(error_kind)
     }
 }
 
@@ -61,6 +91,12 @@ pub enum HdfsLibErrorKind {
     ConfigError(String),
     #[fail(display = "Error happened in hdfs client protocol: {}", _0)]
     ProtocolError(String),
+    
+    // Block operation related error
+    #[fail(display = "Block operation failed: {:?}", _0)]
+    BlockOperationError(BlockOpErrorInfo),
+    #[fail(display = "Invalid block token: {:?}", _0)]
+    InvalidBlockTokenError(BlockOpErrorInfo),
 }
 
 impl HdfsLibError {

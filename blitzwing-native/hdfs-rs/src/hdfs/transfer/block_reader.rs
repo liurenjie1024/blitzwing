@@ -6,7 +6,11 @@ use std::cmp::min;
 use crate::hadoop_proto::datatransfer::{Status, ClientReadStatusProto};
 use protobuf::Message;
 use failure::ResultExt;
-use failure::_core::cell::{RefCell, UnsafeCell};
+use std::cell::{RefCell, UnsafeCell};
+use crate::hdfs::datanode::{DatanodeId, DatanodeInfo};
+use crate::hdfs::block::ExtendedBlock;
+use crate::hdfs::transfer::data_transfer_protocol::{DataTransferProtocol, ReadBlockRequest,
+                                                    BaseBlockOpInfo};
 
 pub(super) type BlockReaderRef = Box<dyn BlockReader>;
 
@@ -14,43 +18,31 @@ pub(super) trait BlockReader: Read {
     fn skip(&mut self, n: usize) -> Result<usize>;
 }
 
-pub(super) struct BlockReaderBuilder {
+pub(super) struct BlockReaderInfo<IN: Read, OUT: Write> {
     config: HdfsClientConfigRef,
-    endpoint: String,
-    offset_in_block: u64,
-}
-
-impl BlockReaderBuilder {
-    pub fn new(config: HdfsClientConfigRef) -> Self {
-        Self {
-            config,
-            endpoint: "".to_string(),
-            offset_in_block: 0,
-        }
-    }
-
-    pub fn with_endpoint<S: ToString>(mut self, endpoint: S) -> Self {
-        self.endpoint = endpoint.to_string();
-        self
-    }
-
-    pub fn with_offset(mut self, offset: u64) -> Self {
-        self.offset_in_block = offset;
-        self
-    }
-
-    /// Currently we only support tcp remote block reader
-    fn build(self) -> Result<BlockReaderRef> {
-        unimplemented!()
-    }
-}
-
-struct RemoteBlockReader<IN, OUT> {
-    // These fields should not be changed after initialization
+    start_offset: u64,
+    bytes_to_read: u64,
+    verify_checksum: bool,
+    client_name: String,
+    datanode_info: DatanodeInfo,
+    
+    filename: String,
+    block: ExtendedBlock,
+    
     input: IN,
     output: OUT,
-    offset_in_block: u64,
-    verify_checksum: bool,
+}
+
+impl<IN: Read, OUT: Write> BlockReaderInfo<IN, OUT> {
+    fn to_read_block_request(&self) -> ReadBlockRequest {
+        let base_info = BaseBlockOpInfo::new(self.filename.clone(), self.block.clone());
+        ReadBlockRequest::new(base_info, self.client_name.clone(), self.start_offset, self
+            .bytes_to_read, self.verify_checksum)
+    }
+}
+
+struct RemoteBlockReader<IN: Read, OUT: Write> {
+    info: BlockReaderInfo<IN, OUT>,
     bytes_per_checksum: usize,
     
     // fields for protocol
@@ -68,6 +60,26 @@ impl<IN, OUT> RemoteBlockReader<IN, OUT>
 where IN: Read,
       OUT: Write,
 {
+    pub(super) fn new(mut info: BlockReaderInfo<IN, OUT>) -> Result<Self> {
+        let request = info.to_read_block_request();
+        let mut protocol = DataTransferProtocol::new(&mut info.input, &mut info.output);
+
+        let response =  protocol.read_block(request)?;
+        
+        Ok(Self {
+            bytes_per_checksum: response.bytes_per_checksum() as usize,
+            last_seq_num: -1,
+            bytes_to_read_remaining: info.bytes_to_read + info.start_offset - response
+                .first_chunk_offset(),
+            
+            skip_buffer: UnsafeCell::new(Vec::new()),
+            
+            packet_receiver: PacketReceiver::new(),
+            pos_in_packet: 0,
+            info,
+        })
+    }
+    
     fn bytes_left_in_current_packet(&self) -> u64 {
         self.packet_receiver
             .current_packet()
@@ -85,7 +97,7 @@ where IN: Read,
     }
 
     fn read_next_packet(&mut self) -> Result<()> {
-        self.packet_receiver.receive_next_packet(&mut self.input)?;
+        self.packet_receiver.receive_next_packet(&mut self.info.input)?;
     
         let packet = self.current_packet()?;
         let packet_offset_in_block = packet.header.offset_in_block();
@@ -102,8 +114,8 @@ where IN: Read,
         
             self.bytes_to_read_remaining -= cur_packet_data_len;
             self.pos_in_packet = 0;
-            if packet_offset_in_block < self.offset_in_block {
-                self.pos_in_packet = (self.offset_in_block - packet_offset_in_block) as usize;
+            if packet_offset_in_block < self.info.start_offset {
+                self.pos_in_packet = (self.info.start_offset - packet_offset_in_block) as usize;
             }
         }
     
@@ -129,7 +141,7 @@ where IN: Read,
         
         if self.bytes_to_read_remaining == 0 {
             self.read_next_packet()?;
-            let status = if self.verify_checksum {
+            let status = if self.info.verify_checksum {
                 Status::CHECKSUM_OK
             } else {
                 Status::SUCCESS
@@ -144,10 +156,10 @@ where IN: Read,
         let mut read_status = ClientReadStatusProto::new();
         read_status.set_status(status);
         
-        read_status.write_length_delimited_to_writer(&mut self.output)
+        read_status.write_length_delimited_to_writer(&mut self.info.output)
             .context(HdfsLibErrorKind::ProtobufError)?;
         
-        self.output.flush()
+        self.info.output.flush()
             .context(HdfsLibErrorKind::IoError)?;
         Ok(())
     }

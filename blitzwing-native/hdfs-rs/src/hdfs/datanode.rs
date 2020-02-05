@@ -1,6 +1,7 @@
 use crate::error::{HdfsLibError, Result};
 use crate::hadoop_proto::hdfs::{DatanodeIDProto, DatanodeInfoProto};
 use std::convert::TryFrom;
+use crate::utils::proto::ProtobufTranslate;
 
 #[derive(Debug, Clone)]
 pub struct DatanodeId {
@@ -35,22 +36,14 @@ impl DatanodeInfoWithStorage {
     pub fn datanode_info(&self) -> DatanodeInfo {
         self.datanode_info.clone()
     }
-}
-
-impl TryFrom<&'_ DatanodeInfoProto> for DatanodeInfo {
-    type Error = HdfsLibError;
-
-    fn try_from(proto: &DatanodeInfoProto) -> Result<Self> {
-        Ok(Self {
-            datanode_id: DatanodeId::try_from(proto.get_id())?,
-        })
+    
+    pub fn storage_id(&self) -> &str {
+        self.storage_id.as_str()
     }
 }
 
-impl TryFrom<&'_ DatanodeIDProto> for DatanodeId {
-    type Error = HdfsLibError;
-
-    fn try_from(proto: &DatanodeIDProto) -> Result<Self> {
+impl ProtobufTranslate<DatanodeIDProto> for DatanodeId {
+    fn try_read_from(proto: &DatanodeIDProto) -> Result<Self> {
         Ok(Self {
             ip_addr: proto.get_ipAddr().to_string(),
             hostname: proto.get_hostName().to_string(),
@@ -60,5 +53,33 @@ impl TryFrom<&'_ DatanodeIDProto> for DatanodeId {
             ipc_port: proto.get_ipcPort(),
             datanode_uuid: proto.get_datanodeUuid().to_string(),
         })
+    }
+    
+    fn try_write_to(&self) -> Result<DatanodeIDProto> {
+        let mut proto = DatanodeIDProto::new();
+        proto.set_ipAddr(self.ip_addr.clone());
+        proto.set_hostName(self.hostname.clone());
+        proto.set_xferPort(self.xfer_port);
+        proto.set_infoPort(self.info_port);
+        proto.set_infoSecurePort(self.info_secure_port);
+        proto.set_ipcPort(self.ipc_port);
+        proto.set_datanodeUuid(self.datanode_uuid.clone());
+        
+        Ok(proto)
+    }
+}
+
+impl ProtobufTranslate<DatanodeInfoProto> for DatanodeInfo {
+    fn try_read_from(proto: &DatanodeInfoProto) -> Result<Self> {
+        Ok(Self {
+            datanode_id: DatanodeId::try_read_from(proto.get_id())?
+        })
+    }
+    
+    fn try_write_to(&self) -> Result<DatanodeInfoProto> {
+        let mut proto = DatanodeInfoProto::new();
+        proto.set_id(self.datanode_id.try_write_to()?);
+        
+        Ok(proto)
     }
 }
