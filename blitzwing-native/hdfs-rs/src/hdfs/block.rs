@@ -1,9 +1,9 @@
-use crate::error::{HdfsLibError, HdfsLibErrorKind, Result};
+use crate::error::{HdfsLibErrorKind, Result};
 use crate::hadoop_proto::hdfs::{ExtendedBlockProto, LocatedBlockProto, LocatedBlocksProto, DatanodeInfoProto};
 use crate::hdfs::block::OffsetOrRange::{Offset, Range as ORange};
 use crate::hdfs::datanode::{DatanodeInfo, DatanodeInfoWithStorage};
 use failure::_core::cmp::Ordering;
-use std::convert::TryFrom;
+
 use std::ops::Range;
 use crate::utils::proto::ProtobufTranslate;
 use protobuf::RepeatedField;

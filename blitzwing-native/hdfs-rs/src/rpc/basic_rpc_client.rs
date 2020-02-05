@@ -17,14 +17,13 @@ use crate::hadoop_proto::RpcHeader::{
 use crate::rpc::message::{deserialize, Messages, RpcMessageSerialize};
 use crate::rt::get_runtime;
 use bytes::{
-    buf::ext::{BufExt, BufMutExt},
-    Buf, BufMut, Bytes, BytesMut,
+    buf::ext::{BufExt, BufMutExt}, BufMut, Bytes, BytesMut,
 };
 use failure::ResultExt;
 use protobuf::{CodedInputStream, Message};
 use std::collections::HashMap;
 use std::fmt::{Debug, Formatter};
-use std::io::Cursor;
+
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::mpsc::{sync_channel as mpsc_sync_channel, SyncSender as MpscSyncSender};

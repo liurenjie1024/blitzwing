@@ -1,6 +1,6 @@
-use crate::error::{HdfsLibError, Result};
+use crate::error::{Result};
 use crate::hadoop_proto::hdfs::{DatanodeIDProto, DatanodeInfoProto};
-use std::convert::TryFrom;
+
 use crate::utils::proto::ProtobufTranslate;
 
 #[derive(Debug, Clone)]

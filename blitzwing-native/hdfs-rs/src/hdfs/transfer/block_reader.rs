@@ -1,13 +1,13 @@
 use crate::error::{HdfsLibError, Result, HdfsLibErrorKind};
 use crate::hdfs::hdfs_config::HdfsClientConfigRef;
-use std::io::{Error, Read, Result as IoResult, Write};
+use std::io::{Read, Result as IoResult, Write};
 use crate::hdfs::transfer::packet::{PacketReceiver, Packet};
 use std::cmp::min;
 use crate::hadoop_proto::datatransfer::{Status, ClientReadStatusProto};
 use protobuf::Message;
 use failure::ResultExt;
-use std::cell::{RefCell, UnsafeCell};
-use crate::hdfs::datanode::{DatanodeId, DatanodeInfo};
+use std::cell::{UnsafeCell};
+use crate::hdfs::datanode::{DatanodeInfo};
 use crate::hdfs::block::ExtendedBlock;
 use crate::hdfs::transfer::data_transfer_protocol::{DataTransferProtocol, ReadBlockRequest,
                                                     BaseBlockOpInfo};

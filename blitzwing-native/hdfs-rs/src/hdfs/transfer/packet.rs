@@ -1,10 +1,10 @@
 use crate::error::HdfsLibErrorKind::ProtobufError;
 use crate::error::{HdfsLibErrorKind, Result};
 use crate::hadoop_proto::datatransfer::PacketHeaderProto;
-use bytes::{Buf, Bytes, BytesMut};
+use bytes::{Buf};
 use failure::ResultExt;
-use failure::_core::ops::Deref;
-use protobuf::{parse_from_bytes, parse_from_reader};
+
+use protobuf::{parse_from_bytes};
 use std::io::{Cursor, Read};
 use std::mem::size_of;
 use std::ops::Range;
@@ -153,7 +153,7 @@ mod tests {
     use protobuf::Message;
     use std::io::prelude::*;
     use std::io::Cursor;
-    use std::rc::Rc;
+    
 
     fn make_packet_header(
         data_len: i32,

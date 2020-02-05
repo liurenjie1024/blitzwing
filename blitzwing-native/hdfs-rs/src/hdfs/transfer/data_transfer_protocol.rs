@@ -1,8 +1,8 @@
 use crate::hdfs::block::ExtendedBlock;
-use crate::error::{Result, HdfsLibError, HdfsLibErrorKind, BlockOpErrorInfo};
+use crate::error::{Result, HdfsLibErrorKind, BlockOpErrorInfo};
 use std::io::{Write, Read};
 use protobuf::Message;
-use std::mem::{size_of_val, size_of};
+use std::mem::{size_of};
 use bytes::BufMut;
 use failure::ResultExt;
 use crate::hadoop_proto::datatransfer::{OpReadBlockProto, BaseHeaderProto,

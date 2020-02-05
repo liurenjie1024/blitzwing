@@ -5,10 +5,10 @@ use crate::hdfs::block::LocatedBlocks;
 use crate::hdfs::datanode::DatanodeInfo;
 use crate::hdfs::hdfs_config::HdfsClientConfigRef;
 use crate::hdfs::protocol::client_protocol::{ClientProtocol, ClientProtocolRef};
-use crate::hdfs::transfer::block_reader::{BlockReader, BlockReaderRef};
+use crate::hdfs::transfer::block_reader::{BlockReaderRef};
 use std::io::{Error as IoError, Read, Seek, SeekFrom};
 use std::result::Result as StdResult;
-use std::sync::Arc;
+
 
 struct DFSInputStream {
     config: HdfsClientConfigRef,
@@ -25,7 +25,7 @@ struct DFSInputStream {
 }
 
 impl Read for DFSInputStream {
-    fn read(&mut self, buf: &mut [u8]) -> StdResult<usize, IoError> {
+    fn read(&mut self, _buf: &mut [u8]) -> StdResult<usize, IoError> {
         unimplemented!()
     }
 }
@@ -79,7 +79,7 @@ impl DFSInputStream {
         }
     }
 
-    fn do_read(&mut self, buf: &mut [u8]) -> Result<usize> {
+    fn do_read(&mut self, _buf: &mut [u8]) -> Result<usize> {
         unimplemented!()
     }
 
@@ -116,7 +116,7 @@ impl DFSInputStream {
 
     fn do_seek_to_new_block(&mut self) -> Result<()> {
         let new_block_idx = self.fetch_located_block()?;
-        let new_data_node = self.choose_datanode(new_block_idx)?;
+        let _new_data_node = self.choose_datanode(new_block_idx)?;
 
         unimplemented!()
     }
@@ -137,7 +137,7 @@ impl DFSInputStream {
 
         located_blocks
             .blocks()
-            .try_for_each(|b| self.blocks.add_block(b).map(|v| ()))?;
+            .try_for_each(|b| self.blocks.add_block(b).map(|_v| ()))?;
 
         self.blocks.search_block(self.pos).ok_or_else(|| {
             HdfsLibErrorKind::SystemError(format!(

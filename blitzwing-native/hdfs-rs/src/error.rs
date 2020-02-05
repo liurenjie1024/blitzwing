@@ -4,7 +4,7 @@ use crate::hadoop_proto::RpcHeader::{
 use failure::{Backtrace, Context, Fail};
 use std::fmt::{Display, Formatter};
 use std::time::Duration;
-use crate::hdfs::block::ExtendedBlock;
+
 use crate::hdfs::transfer::data_transfer_protocol::BaseBlockOpInfo;
 use crate::hadoop_proto::datatransfer::{BlockOpResponseProto, Status as BlockOpStatus};
 
