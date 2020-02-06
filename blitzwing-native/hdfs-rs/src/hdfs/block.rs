@@ -28,13 +28,13 @@ pub struct LocatedBlock {
     corrupt: bool,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Default)]
 pub struct ExtendedBlock {
     pool_id: String,
     block: Block,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq, Default)]
 pub struct Block {
     block_id: u64,
     num_bytes: u64,

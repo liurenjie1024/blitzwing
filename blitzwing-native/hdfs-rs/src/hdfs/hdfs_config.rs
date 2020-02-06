@@ -10,6 +10,7 @@ const DFS_BLOCK_SIZE_DEFAULT: u64 = 128 * 1024 * 1024;
 
 const KEY_DFS_CLIENT_READ_PREFETCH_SIZE_KEY: &'static str = "dfs.client.read.prefetch.size";
 
+#[derive(Default)]
 pub struct HdfsClientConfig {
     inner: ConfigRef,
 

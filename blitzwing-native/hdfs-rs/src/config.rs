@@ -12,6 +12,7 @@ struct ConfigData {
     _is_final: bool,
 }
 
+#[derive(Default)]
 pub struct Configuration {
     data: HashMap<ConfigKey, ConfigData>,
 }

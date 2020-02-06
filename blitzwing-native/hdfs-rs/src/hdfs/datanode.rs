@@ -3,7 +3,7 @@ use crate::hadoop_proto::hdfs::{DatanodeIDProto, DatanodeInfoProto};
 
 use crate::utils::proto::ProtobufTranslate;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct DatanodeId {
     ip_addr: String,
     hostname: String,
@@ -14,12 +14,12 @@ pub struct DatanodeId {
     datanode_uuid: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct DatanodeInfo {
     datanode_id: DatanodeId,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct DatanodeInfoWithStorage {
     datanode_info: DatanodeInfo,
     storage_id: String,

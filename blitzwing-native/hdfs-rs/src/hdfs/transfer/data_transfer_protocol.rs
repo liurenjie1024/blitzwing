@@ -157,3 +157,30 @@ fn check_block_operation_response(
 const fn request_header_size() -> usize {
     size_of::<u8>() + size_of::<i16>()
 }
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use crate::hadoop_proto::datatransfer::{
+        BlockOpResponseProto, ChecksumProto, ReadOpChecksumInfoProto, Status,
+    };
+    use crate::hadoop_proto::hdfs::ChecksumTypeProto;
+
+    pub(crate) fn make_read_checksum_response(
+        first_chunk_offset: u64,
+        bytes_per_checksum: u32,
+    ) -> BlockOpResponseProto {
+        let mut checksum_proto = ChecksumProto::new();
+        checksum_proto.set_field_type(ChecksumTypeProto::CHECKSUM_NULL);
+        checksum_proto.set_bytesPerChecksum(bytes_per_checksum);
+
+        let mut read_op_checksum_info_proto = ReadOpChecksumInfoProto::new();
+        read_op_checksum_info_proto.set_checksum(checksum_proto);
+        read_op_checksum_info_proto.set_chunkOffset(first_chunk_offset);
+
+        let mut block_op_response_proto = BlockOpResponseProto::new();
+        block_op_response_proto.set_status(Status::SUCCESS);
+        block_op_response_proto.set_readOpChecksumInfo(read_op_checksum_info_proto);
+
+        block_op_response_proto
+    }
+}

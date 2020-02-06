@@ -20,15 +20,25 @@ pub(super) trait BlockReader: Read {
     fn skip(&mut self, n: usize) -> Result<usize>;
 }
 
+#[derive(new, Setters)]
+#[set = "pub"]
 pub(super) struct BlockReaderInfo<C> {
+    #[new(default)]
     config: HdfsClientConfigRef,
+    #[new(value = "0")]
     start_offset: u64,
+    #[new(default)]
     bytes_to_read: u64,
+    #[new(value = "false")]
     verify_checksum: bool,
+    #[new(default)]
     client_name: String,
+    #[new(default)]
     datanode_info: DatanodeInfo,
 
+    #[new(default)]
     filename: String,
+    #[new(default)]
     block: ExtendedBlock,
 
     connection: C,
@@ -84,10 +94,15 @@ impl<C: Connection> RemoteBlockReader<C> {
     }
 
     fn bytes_left_in_current_packet(&self) -> u64 {
-        self.packet_receiver
-            .current_packet()
-            .map(|p| p.data.len() - self.pos_in_packet)
-            .unwrap_or(0) as u64
+        if let Some(p) = self.packet_receiver.current_packet() {
+            if p.data.len() >= self.pos_in_packet {
+                (p.data.len() - self.pos_in_packet) as u64
+            } else {
+                0u64
+            }
+        } else {
+            0u64
+        }
     }
 
     fn bytes_left_in_current_block(&self) -> u64 {
@@ -142,8 +157,9 @@ impl<C: Connection> RemoteBlockReader<C> {
 
         let bytes_written = min(self.bytes_left_in_current_packet() as usize, buf.len());
 
-        let packet_data = &self.current_packet()?.data[self.pos_in_packet..];
-        buf.copy_from_slice(packet_data);
+        let packet_data =
+            &self.current_packet()?.data[self.pos_in_packet..(self.pos_in_packet + bytes_written)];
+        (&mut buf[..bytes_written]).copy_from_slice(packet_data);
 
         self.pos_in_packet += bytes_written;
 
@@ -205,10 +221,91 @@ impl<C: Connection> RemoteBlockReader<C> {
 }
 
 #[cfg(test)]
-mod tests {
-    
+pub(crate) mod tests {
+    use crate::hdfs::transfer::block_io::{BlockReaderInfo, RemoteBlockReader};
+    use crate::hdfs::transfer::connection::Connection;
+    use crate::hdfs::transfer::data_transfer_protocol::tests::make_read_checksum_response;
+    use crate::hdfs::transfer::packet::tests::TestPacketGenerator;
+    use protobuf::Message;
+    use std::io::{Cursor, Read};
+    use std::net::SocketAddr;
+
+    #[derive(new, MutGetters, Getters, Setters)]
+    #[set = "pub"]
+    pub(super) struct TestConnection {
+        #[get_mut = "pub"]
+        input: Cursor<Vec<u8>>,
+        #[new(default)]
+        #[get_mut = "pub"]
+        output: Vec<u8>,
+        #[get = "pub"]
+        address: SocketAddr,
+    }
+
+    impl Connection for TestConnection {
+        type In = Cursor<Vec<u8>>;
+        type Out = Vec<u8>;
+
+        fn input_stream(&mut self) -> &mut Self::In {
+            &mut self.input
+        }
+
+        fn output_stream(&mut self) -> &mut Self::Out {
+            &mut self.output
+        }
+
+        fn local_address(&self) -> &SocketAddr {
+            &self.address
+        }
+
+        fn remote_address(&self) -> &SocketAddr {
+            &self.address
+        }
+    }
+
     #[test]
     fn test_read_block() {
-    
+        let mut network_input = Vec::new();
+
+        let block_op_response = make_read_checksum_response(0, 4);
+        block_op_response
+            .write_length_delimited_to_vec(&mut network_input)
+            .expect("Failed to write block op response");
+
+        let test_packet_generator = TestPacketGenerator::new(4);
+        let test_packets = test_packet_generator.generate();
+        let block_content_len: usize = test_packets
+            .packets()
+            .iter()
+            .map(|p| p.packet().data.len())
+            .sum();
+
+        network_input.extend_from_slice(test_packets.all_packet_data());
+
+        let socket_address = "127.0.0.1:80"
+            .parse()
+            .expect("Failed to parse socket address!");
+        let conn = TestConnection::new(Cursor::new(network_input), socket_address);
+
+        let mut block_reader_info = BlockReaderInfo::new(conn);
+
+        block_reader_info.set_bytes_to_read(block_content_len as u64);
+
+        let mut block_reader = RemoteBlockReader::new(block_reader_info)
+            .expect("Failed to build remote block reader!");
+
+        let block_content: Vec<u8> = test_packets
+            .packets()
+            .iter()
+            .flat_map(|p| p.packet().data)
+            .map(|v| *v)
+            .collect();
+
+        let mut read_content = Vec::with_capacity(block_content.len());
+        block_reader
+            .read_to_end(&mut read_content)
+            .expect("Failed to read block content");
+
+        assert_eq!(block_content, read_content);
     }
 }
