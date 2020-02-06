@@ -24,11 +24,12 @@ pub(crate) struct PacketHeader {
     proto: PacketHeaderProto,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Getters)]
+#[get = "pub"]
 pub(crate) struct Packet<'a> {
-    pub header: &'a PacketHeader,
-    pub data: &'a [u8],
-    pub checksum: &'a [u8],
+    header: &'a PacketHeader,
+    data: &'a [u8],
+    checksum: &'a [u8],
 }
 
 pub(crate) struct PacketInfo {

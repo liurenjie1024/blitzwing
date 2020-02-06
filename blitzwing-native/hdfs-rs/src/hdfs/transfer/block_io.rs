@@ -95,8 +95,8 @@ impl<C: Connection> RemoteBlockReader<C> {
 
     fn bytes_left_in_current_packet(&self) -> u64 {
         if let Some(p) = self.packet_receiver.current_packet() {
-            if p.data.len() >= self.pos_in_packet {
-                (p.data.len() - self.pos_in_packet) as u64
+            if p.data().len() >= self.pos_in_packet {
+                (p.data().len() - self.pos_in_packet) as u64
             } else {
                 0u64
             }
@@ -123,15 +123,15 @@ impl<C: Connection> RemoteBlockReader<C> {
             .receive_next_packet(self.info.connection.input_stream())?;
 
         let packet = self.current_packet()?;
-        let packet_offset_in_block = packet.header.offset_in_block();
+        let packet_offset_in_block = packet.header().offset_in_block();
 
         // Sanity check
         packet.sanity_check()?;
 
-        let cur_packet_data_len = packet.header.data_len() as u64;
-        let cur_packet_seq_num = packet.header.seq_number();
+        let cur_packet_data_len = packet.header().data_len() as u64;
+        let cur_packet_seq_num = packet.header().seq_number();
 
-        if packet.header.data_len() > 0 {
+        if packet.header().data_len() > 0 {
             check_protocol_content!((self.last_seq_num + 1) == cur_packet_seq_num);
             // TODO: Verify checksum
 
@@ -157,8 +157,8 @@ impl<C: Connection> RemoteBlockReader<C> {
 
         let bytes_written = min(self.bytes_left_in_current_packet() as usize, buf.len());
 
-        let packet_data =
-            &self.current_packet()?.data[self.pos_in_packet..(self.pos_in_packet + bytes_written)];
+        let packet_data = &self.current_packet()?.data()
+            [self.pos_in_packet..(self.pos_in_packet + bytes_written)];
         (&mut buf[..bytes_written]).copy_from_slice(packet_data);
 
         self.pos_in_packet += bytes_written;
@@ -277,7 +277,7 @@ pub(crate) mod tests {
         let block_content_len: usize = test_packets
             .packets()
             .iter()
-            .map(|p| p.packet().data.len())
+            .map(|p| p.packet().data().len())
             .sum();
 
         network_input.extend_from_slice(test_packets.all_packet_data());
@@ -297,7 +297,7 @@ pub(crate) mod tests {
         let block_content: Vec<u8> = test_packets
             .packets()
             .iter()
-            .flat_map(|p| p.packet().data)
+            .flat_map(|p| *p.packet().data())
             .map(|v| *v)
             .collect();
 
