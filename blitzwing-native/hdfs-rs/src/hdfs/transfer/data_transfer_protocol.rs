@@ -3,11 +3,12 @@ use crate::hadoop_proto::datatransfer::{
     BaseHeaderProto, BlockOpResponseProto, ClientOperationHeaderProto, OpReadBlockProto, Status,
 };
 use crate::hdfs::block::ExtendedBlock;
+use crate::hdfs::transfer::connection::Connection;
 use crate::utils::proto::{parse_delimited_message, ProtobufTranslate};
 use bytes::BufMut;
 use failure::ResultExt;
 use protobuf::Message;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::mem::size_of;
 
 /// Operations codes
@@ -53,12 +54,15 @@ pub struct ReadBlockResponse {
     bytes_per_checksum: u64,
 }
 
-pub struct DataTransferProtocol<'a, IN: Read, OUT: Write> {
-    input: &'a mut IN,
-    output: &'a mut OUT,
+pub struct DataTransferProtocol<'a, C> {
+    connection: &'a mut C,
 }
 
-impl<'a, IN: Read, OUT: Write> DataTransferProtocol<'a, IN, OUT> {
+impl<'a, C: Connection> DataTransferProtocol<'a, C> {
+    pub fn new(connection: &'a mut C) -> Self {
+        Self { connection }
+    }
+
     fn send<M: Message>(&mut self, op: u8, message: M) -> Result<()> {
         // We add 8 here because we need to include serialized message length
         let mut buffer: Vec<u8> =
@@ -70,18 +74,16 @@ impl<'a, IN: Read, OUT: Write> DataTransferProtocol<'a, IN, OUT> {
             .write_length_delimited_to_writer(&mut buffer)
             .context(HdfsLibErrorKind::ProtobufError)?;
 
-        self.output
+        self.connection
+            .output_stream()
             .write(&buffer)
             .context(HdfsLibErrorKind::IoError)?;
-        self.output.flush().context(HdfsLibErrorKind::IoError)?;
+        self.connection
+            .output_stream()
+            .flush()
+            .context(HdfsLibErrorKind::IoError)?;
 
         Ok(())
-    }
-}
-
-impl<'a, IN: Read, OUT: Write> DataTransferProtocol<'a, IN, OUT> {
-    pub fn new(input: &'a mut IN, output: &'a mut OUT) -> Self {
-        Self { input, output }
     }
 
     pub fn read_block(&mut self, request: ReadBlockRequest) -> Result<ReadBlockResponse> {
@@ -96,7 +98,8 @@ impl<'a, IN: Read, OUT: Write> DataTransferProtocol<'a, IN, OUT> {
 
         self.send(OP_READ_BLOCK, proto)?;
 
-        let response_proto: BlockOpResponseProto = parse_delimited_message(&mut self.input)?;
+        let response_proto: BlockOpResponseProto =
+            parse_delimited_message(self.connection.input_stream())?;
 
         check_block_operation_response(&request.base_info, &response_proto)?;
 

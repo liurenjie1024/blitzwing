@@ -3,6 +3,7 @@ use crate::hadoop_proto::datatransfer::{ClientReadStatusProto, Status};
 use crate::hdfs::block::ExtendedBlock;
 use crate::hdfs::datanode::DatanodeInfo;
 use crate::hdfs::hdfs_config::HdfsClientConfigRef;
+use crate::hdfs::transfer::connection::Connection;
 use crate::hdfs::transfer::data_transfer_protocol::{
     BaseBlockOpInfo, DataTransferProtocol, ReadBlockRequest,
 };
@@ -19,7 +20,7 @@ pub(super) trait BlockReader: Read {
     fn skip(&mut self, n: usize) -> Result<usize>;
 }
 
-pub(super) struct BlockReaderInfo<IN: Read, OUT: Write> {
+pub(super) struct BlockReaderInfo<C> {
     config: HdfsClientConfigRef,
     start_offset: u64,
     bytes_to_read: u64,
@@ -30,11 +31,10 @@ pub(super) struct BlockReaderInfo<IN: Read, OUT: Write> {
     filename: String,
     block: ExtendedBlock,
 
-    input: IN,
-    output: OUT,
+    connection: C,
 }
 
-impl<IN: Read, OUT: Write> BlockReaderInfo<IN, OUT> {
+impl<C> BlockReaderInfo<C> {
     fn to_read_block_request(&self) -> ReadBlockRequest {
         let base_info = BaseBlockOpInfo::new(self.filename.clone(), self.block.clone());
         ReadBlockRequest::new(
@@ -47,8 +47,8 @@ impl<IN: Read, OUT: Write> BlockReaderInfo<IN, OUT> {
     }
 }
 
-struct RemoteBlockReader<IN: Read, OUT: Write> {
-    info: BlockReaderInfo<IN, OUT>,
+struct RemoteBlockReader<C> {
+    info: BlockReaderInfo<C>,
     bytes_per_checksum: usize,
 
     // fields for protocol
@@ -62,14 +62,10 @@ struct RemoteBlockReader<IN: Read, OUT: Write> {
     pos_in_packet: usize,
 }
 
-impl<IN, OUT> RemoteBlockReader<IN, OUT>
-where
-    IN: Read,
-    OUT: Write,
-{
-    pub(super) fn new(mut info: BlockReaderInfo<IN, OUT>) -> Result<Self> {
+impl<C: Connection> RemoteBlockReader<C> {
+    pub(super) fn new(mut info: BlockReaderInfo<C>) -> Result<Self> {
         let request = info.to_read_block_request();
-        let mut protocol = DataTransferProtocol::new(&mut info.input, &mut info.output);
+        let mut protocol = DataTransferProtocol::new(&mut info.connection);
 
         let response = protocol.read_block(request)?;
 
@@ -109,7 +105,7 @@ where
 
     fn read_next_packet(&mut self) -> Result<()> {
         self.packet_receiver
-            .receive_next_packet(&mut self.info.input)?;
+            .receive_next_packet(self.info.connection.input_stream())?;
 
         let packet = self.current_packet()?;
         let packet_offset_in_block = packet.header.offset_in_block();
@@ -169,32 +165,25 @@ where
         read_status.set_status(status);
 
         read_status
-            .write_length_delimited_to_writer(&mut self.info.output)
+            .write_length_delimited_to_writer(&mut self.info.connection.output_stream())
             .context(HdfsLibErrorKind::ProtobufError)?;
 
         self.info
-            .output
+            .connection
+            .output_stream()
             .flush()
             .context(HdfsLibErrorKind::IoError)?;
         Ok(())
     }
 }
 
-impl<IN, OUT> Read for RemoteBlockReader<IN, OUT>
-where
-    IN: Read,
-    OUT: Write,
-{
+impl<C: Connection> Read for RemoteBlockReader<C> {
     fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
         self.do_read(buf).map_err(|e| e.into_std_io_error())
     }
 }
 
-impl<IN, OUT> RemoteBlockReader<IN, OUT>
-where
-    IN: Read,
-    OUT: Write,
-{
+impl<C: Connection> RemoteBlockReader<C> {
     fn skip(&mut self, n: usize) -> Result<usize> {
         let skip_buffer = unsafe { &mut *self.skip_buffer.get() };
         skip_buffer.resize(self.bytes_per_checksum, 0);
