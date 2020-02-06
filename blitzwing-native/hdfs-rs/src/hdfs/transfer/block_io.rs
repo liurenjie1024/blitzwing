@@ -230,6 +230,8 @@ pub(crate) mod tests {
     use std::io::{Cursor, Read};
     use std::net::SocketAddr;
 
+    type TestRemoteBlockReader = RemoteBlockReader<TestConnection>;
+
     #[derive(new, MutGetters, Getters, Setters)]
     #[set = "pub"]
     pub(super) struct TestConnection {
@@ -263,8 +265,7 @@ pub(crate) mod tests {
         }
     }
 
-    #[test]
-    fn test_read_block() {
+    fn prepare_block_reader(packet_num: u32) -> (TestRemoteBlockReader, Vec<u8>) {
         let mut network_input = Vec::new();
 
         let block_op_response = make_read_checksum_response(0, 4);
@@ -272,7 +273,7 @@ pub(crate) mod tests {
             .write_length_delimited_to_vec(&mut network_input)
             .expect("Failed to write block op response");
 
-        let test_packet_generator = TestPacketGenerator::new(4);
+        let test_packet_generator = TestPacketGenerator::new(packet_num);
         let test_packets = test_packet_generator.generate();
         let block_content_len: usize = test_packets
             .packets()
@@ -291,7 +292,7 @@ pub(crate) mod tests {
 
         block_reader_info.set_bytes_to_read(block_content_len as u64);
 
-        let mut block_reader = RemoteBlockReader::new(block_reader_info)
+        let block_reader = RemoteBlockReader::new(block_reader_info)
             .expect("Failed to build remote block reader!");
 
         let block_content: Vec<u8> = test_packets
@@ -301,11 +302,42 @@ pub(crate) mod tests {
             .map(|v| *v)
             .collect();
 
+        (block_reader, block_content)
+    }
+
+    #[test]
+    fn test_read_block() {
+        let (mut block_reader, block_content) = prepare_block_reader(4);
+
         let mut read_content = Vec::with_capacity(block_content.len());
         block_reader
             .read_to_end(&mut read_content)
             .expect("Failed to read block content");
 
         assert_eq!(block_content, read_content);
+    }
+
+    #[test]
+    fn test_read_block_and_skip() {
+        let (mut block_reader, block_content) = prepare_block_reader(4);
+
+        let mut read_content = Vec::with_capacity(block_content.len());
+        read_content.resize(2, 0u8);
+        block_reader
+            .read_exact(&mut read_content)
+            .expect("Failed to read first 2 bytes of block");
+
+        assert_eq!(&block_content[0..2], read_content.as_slice());
+
+        let skipped = block_reader
+            .skip(1)
+            .expect("Failed to skip 1 byte of block reader!");
+        assert_eq!(1, skipped);
+
+        read_content.resize(3, 0);
+        block_reader
+            .read_exact(&mut read_content)
+            .expect("Failed to read last 3 bytes of block");
+        assert_eq!(&block_content[3..], read_content.as_slice());
     }
 }
