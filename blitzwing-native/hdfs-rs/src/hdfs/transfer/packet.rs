@@ -31,7 +31,7 @@ pub(super) struct Packet<'a> {
     pub checksum: &'a [u8],
 }
 
-struct PacketInfo {
+pub(super) struct PacketInfo {
     header: PacketHeader,
     data_idx: Range<usize>,
     checksum_idx: Range<usize>,
@@ -56,7 +56,7 @@ impl PacketHeader {
 }
 
 impl PacketInfo {
-    fn packet_of<'a, S: AsRef<[u8]>>(&'a self, buffer: &'a S) -> Packet<'a> {
+    pub(super) fn packet_of<'a, S: AsRef<[u8]>>(&'a self, buffer: &'a S) -> Packet<'a> {
         Packet {
             header: &self.header,
             data: &buffer.as_ref()[self.data_idx.clone()],
@@ -154,67 +154,120 @@ impl PacketReceiver {
 
 #[cfg(test)]
 mod tests {
+    
     use super::*;
+    use std::io::Cursor;
+    use crate::hdfs::transfer::packet::{PacketInfo, Packet, PacketHeader, BODY_LENGTH_LEN};
+    use crate::hadoop_proto::datatransfer::PacketHeaderProto;
     use crate::error::Result;
     use bytes::BufMut;
-    use failure::ResultExt;
     use protobuf::Message;
-    use std::io::prelude::*;
-    use std::io::Cursor;
-
-    fn make_packet_header(
-        data_len: i32,
-        last_packet_in_block: bool,
-        seq_no: i64,
-    ) -> PacketHeaderProto {
-        let mut header = PacketHeaderProto::new();
-        header.set_dataLen(data_len);
-        header.set_lastPacketInBlock(last_packet_in_block);
-        header.set_offsetInBlock(1);
-        header.set_seqno(seq_no);
-        header.set_syncBlock(false);
-
-        header
+    use failure::ResultExt;
+    use std::io::Write;
+    use crate::error::HdfsLibErrorKind;
+    use rand::random;
+    
+    #[derive(new)]
+    struct TestPacketGenerator {
+        packets_to_gen: u32
     }
-
-    fn prepare_packet(header: &PacketHeaderProto, checksum: &[u8], data: &[u8]) -> Result<Vec<u8>> {
-        let mut buffer = Vec::new();
-
-        let packet_len = checksum.len() + data.len() + BODY_LENGTH_LEN;
-
-        buffer.put_u32(packet_len as u32);
-        buffer.put_u16(header.compute_size() as u16);
-
-        header
-            .write_to_vec(&mut buffer)
-            .context(HdfsLibErrorKind::ProtobufError)?;
-
-        buffer
-            .write_all(checksum)
-            .context(HdfsLibErrorKind::IoError)?;
-        buffer.write_all(data).context(HdfsLibErrorKind::IoError)?;
-
-        Ok(buffer)
-    }
-
+    
+    #[derive(Getters)]
+    #[get = "pub"]
     struct TestPacketData {
         packet_data: Vec<u8>,
         packet_info: PacketInfo,
     }
-
+    
     impl TestPacketData {
-        fn packet(&self) -> Packet {
+        pub fn packet(&self) -> Packet {
             self.packet_info.packet_of(&self.packet_data)
         }
     }
-
-    fn generate_test_packet(last_packet_in_block: bool) -> TestPacketData {
-        let checksum = vec![1u8, 2u8, 3u8];
-        let data = vec![2u8, 3u8, 4u8];
-        let header = make_packet_header(data.len() as i32, last_packet_in_block, 1);
-        let packet_data =
-            prepare_packet(&header, &checksum, &data).expect("Failed to prepare packet data");
-
+    
+    #[derive(Getters)]
+    #[get = "pub"]
+    struct TestPackets {
+        all_packet_data: Vec<u8>,
+        packets: Vec<TestPacketData>
+    }
+    
+    impl TestPacketGenerator {
+        pub fn generate(&self) -> TestPackets {
+            assert!(self.packets_to_gen > 0);
+            
+            let mut offset = 0u64;
+            let mut all_packet_data = Vec::new();
+            let mut packets = Vec::new();
+            
+            for i in 1..self.packets_to_gen {
+                let checksum = {
+                    let mut v = Vec::with_capacity(i as usize);
+                    v.resize_with(i as usize, || random::<u8>());
+                    v
+                };
+                
+                let data = {
+                    let mut v = Vec::with_capacity(i as usize);
+                    v.resize_with(i as usize, || random::<u8>());
+                    v
+                };
+                
+                let test_packet_data = generate_test_packet(&checksum, &data, (i-1) as i64, offset,
+                                                            false);
+                
+                all_packet_data.extend_from_slice(&test_packet_data.packet_data);
+                packets.push(test_packet_data);
+                offset += data.len() as u64;
+            }
+            
+            // last packet should be empty
+            let test_packet_data = generate_test_packet(&[], &[], self.packets_to_gen as i64, offset,
+                                                            true);
+            all_packet_data.extend_from_slice(&test_packet_data.packet_data);
+            packets.push(test_packet_data);
+            
+            TestPackets {
+                all_packet_data,
+                packets
+            }
+        }
+    }
+    
+    fn prepare_packet(header: &PacketHeaderProto, checksum: &[u8], data: &[u8]) -> Result<Vec<u8>> {
+        let mut buffer = Vec::new();
+        
+        let packet_len = checksum.len() + data.len() + BODY_LENGTH_LEN;
+        
+        buffer.put_u32(packet_len as u32);
+        buffer.put_u16(header.compute_size() as u16);
+        
+        header
+            .write_to_vec(&mut buffer)
+            .context(HdfsLibErrorKind::ProtobufError)?;
+        
+        buffer
+            .write_all(checksum)
+            .context(HdfsLibErrorKind::IoError)?;
+        buffer.write_all(data).context(HdfsLibErrorKind::IoError)?;
+        
+        Ok(buffer)
+    }
+    
+    fn generate_test_packet(checksum: &[u8], data: &[u8], seq_number: i64, offset: u64, last_packet: bool) -> TestPacketData {
+        let header = {
+            let mut header = PacketHeaderProto::new();
+            header.set_dataLen(data.len() as i32);
+            header.set_lastPacketInBlock(last_packet);
+            header.set_offsetInBlock(offset as i64);
+            header.set_seqno(seq_number);
+            header.set_syncBlock(false);
+            
+            header
+        };
+        
+        let packet_data = prepare_packet(&header, &checksum, &data).expect("Failed to prepare packet data");
+        
         let checksum_start = packet_data.len() - checksum.len() - data.len();
         let data_start = packet_data.len() - data.len();
         TestPacketData {
@@ -229,27 +282,16 @@ mod tests {
             },
         }
     }
-
+    
     #[test]
     fn test_read_packet() {
-        let mut packet_data = Vec::new();
-        let mut test_packets = Vec::new();
+        let test_packet_num = 10usize;
+        let test_packet_gen = TestPacketGenerator::new(test_packet_num as u32);
 
-        let test_packet_num = 10;
-
-        for i in 0..test_packet_num {
-            let last_block = (i + 1) == (test_packet_num - 1);
-            let test_packet_data = generate_test_packet(last_block);
-
-            packet_data.extend_from_slice(test_packet_data.packet_data.as_slice());
-            test_packets.push(test_packet_data);
-        }
-
-        //        println!("Packet data: {:?}", &packet_data);
-
+        let test_packets = test_packet_gen.generate();
         let mut packet_receiver = PacketReceiver::new();
 
-        let mut reader = Cursor::new(packet_data);
+        let mut reader = Cursor::new(test_packets.all_packet_data());
 
         for i in 0..test_packet_num {
             packet_receiver
@@ -257,7 +299,7 @@ mod tests {
                 .expect(format!("Failed to read packet: {}.", i + 1).as_str());
 
             assert_eq!(
-                Some(test_packets[i].packet()),
+                Some(test_packets.packets[i].packet()),
                 packet_receiver.current_packet()
             );
         }

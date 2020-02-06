@@ -203,3 +203,12 @@ impl<C: Connection> RemoteBlockReader<C> {
         Ok(bytes_skipped)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    
+    #[test]
+    fn test_read_block() {
+    
+    }
+}
