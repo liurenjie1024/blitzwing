@@ -1,163 +1,228 @@
-use crate::error::HdfsLibErrorKind::InvalidArgumentError;
-use crate::error::{HdfsLibErrorKind, Result};
-use crate::fs::input_stream::FsInputStream;
-use crate::hdfs::block::LocatedBlocks;
-use crate::hdfs::datanode::DatanodeInfo;
-use crate::hdfs::hdfs_config::HdfsClientConfigRef;
-use crate::hdfs::protocol::client_protocol::ClientProtocolRef;
-use crate::hdfs::transfer::block_io::BlockReaderRef;
-use std::io::{Error as IoError, Read, Seek, SeekFrom};
-use std::result::Result as StdResult;
+use crate::{
+  error::{
+    HdfsLibError, HdfsLibErrorKind,
+    HdfsLibErrorKind::{IllegalStateError, MissingBlockError},
+    MissingBlockErrorInfo, Result,
+  },
+  fs::input_stream::FsInputStream,
+  hdfs::{
+    block::{LocatedBlock, LocatedBlocks},
+    datanode::DatanodeInfo,
+    hdfs_config::HdfsClientConfigRef,
+    protocol::client_protocol::ClientProtocolRef,
+    transfer::block_io::{BlockReaderArgs, BlockReaderFactoryRef, BlockReaderRef},
+  },
+};
+use failure::ResultExt;
+use std::{
+  collections::HashSet,
+  io::{Error as IoError, Read, Seek, SeekFrom},
+  result::Result as StdResult,
+};
 
 struct DFSInputStream {
-    config: HdfsClientConfigRef,
-    name_node: ClientProtocolRef,
-    blocks: LocatedBlocks,
-    file_path: String,
+  config: HdfsClientConfigRef,
+  name_node: ClientProtocolRef,
+  block_reader_factory: BlockReaderFactoryRef,
+  blocks: LocatedBlocks,
+  file_path: String,
 
-    pos: u64,
+  pos: usize,
+  seek_pos: usize,
 
-    // We should keep updating these three fields in a transactional way
-    current_block_idx: Option<usize>,
-    current_data_node: Option<DatanodeInfo>,
-    block_reader: Option<BlockReaderRef>,
+  dead_nodes: HashSet<DatanodeInfo>,
+  read_block_failures: u32,
+
+  // Current block related information, these fields should be updated transactionally
+  cur_block_reader: Option<BlockReaderRef>,
+  cur_block: Option<LocatedBlock>,
+  cur_datanode: Option<DatanodeInfo>,
+}
+
+struct BlockReaderInfo {
+  block_reader: BlockReaderRef,
+  block: LocatedBlock,
 }
 
 impl Read for DFSInputStream {
-    fn read(&mut self, _buf: &mut [u8]) -> StdResult<usize, IoError> {
-        unimplemented!()
-    }
+  fn read(&mut self, _buf: &mut [u8]) -> StdResult<usize, IoError> {
+    unimplemented!()
+  }
 }
 
 impl Seek for DFSInputStream {
-    fn seek(&mut self, pos: SeekFrom) -> StdResult<u64, IoError> {
-        self.do_seek(pos).map_err(|e| e.into_std_io_error())
-    }
+  fn seek(&mut self, pos: SeekFrom) -> StdResult<u64, IoError> {
+    self.do_seek(pos).map(|r| r as u64).map_err(|e| e.into_std_io_error())
+  }
 }
 
-impl FsInputStream for DFSInputStream {}
+impl FsInputStream for DFSInputStream {
+  fn skip(&mut self, len: usize) -> Result<usize> {
+    self.do_seek(SeekFrom::Current(len as i64))
+  }
+}
 
 impl DFSInputStream {
-    pub fn get_len(&self) -> Result<u64> {
-        Ok(self.blocks.get_file_len())
-    }
+  pub fn get_len(&self) -> Result<usize> {
+    Ok(self.blocks.get_file_len())
+  }
 
-    fn do_seek(&mut self, pos: SeekFrom) -> Result<u64> {
-        match pos {
-            SeekFrom::Start(p) => {
-                self.check_pos(p as i64)?;
-                self.pos = p;
-            }
-            SeekFrom::Current(p) => {
-                let new_pos = p + self.pos as i64;
-                self.check_pos(new_pos)?;
-                self.pos = new_pos as u64;
-            }
-            SeekFrom::End(_) => {
-                return Err(InvalidArgumentError(format!(
-                    "Currently seek from end is not \
-                     supported!"
-                ))
-                .into())
-            }
-        };
-        Ok(self.pos)
-    }
-
-    fn check_pos(&self, new_pos: i64) -> Result<()> {
-        let len = self.get_len()?;
-        if new_pos < 0 || (new_pos as u64) >= len {
-            Err(InvalidArgumentError(format!(
-                "Invalid position {}, which should be between {}, \
-                 {}.",
-                new_pos, 0, len
-            ))
-            .into())
+  fn do_seek(&mut self, pos: SeekFrom) -> Result<usize> {
+    let new_pos = match pos {
+      SeekFrom::Start(p) => p as usize,
+      SeekFrom::Current(p) => {
+        if p >= 0 {
+          self.seek_pos + (p as usize)
         } else {
-            Ok(())
+          self.seek_pos - (-1 * p) as usize
         }
-    }
+      }
+      SeekFrom::End(p) => {
+        check_args!(p <= 0);
+        self.seek_pos - (-1 * p) as usize
+      }
+    };
 
-    fn do_read(&mut self, _buf: &mut [u8]) -> Result<usize> {
-        unimplemented!()
-    }
+    self.check_pos(new_pos)?;
+    self.seek_pos = new_pos;
+    Ok(self.seek_pos)
+  }
 
-    fn seek_to_target_block(&mut self) -> Result<()> {
-        // Check whether we need to seek to new block
-        if let Some(idx) = self.current_block_idx {
-            match self.blocks.in_range(idx, self.pos) {
-                Ok(true) => {
-                    debug!(
-                        "Current position {} in block [{:?}], will skip seeking to new block",
-                        self.pos,
-                        self.blocks.get_block(idx)
-                    );
-                    return Ok(());
-                }
-                Ok(false) => {
-                    debug!(
-                        "Current position {} not in block [{:?}], will seek to new block",
-                        self.pos,
-                        self.blocks.get_block(idx)
-                    );
-                }
-                Err(e) => {
-                    warn!(
-                        "Failed to check whether current position {} in block range: {}",
-                        self.pos, e
-                    );
-                }
-            }
+  fn check_pos(&self, new_pos: usize) -> Result<()> {
+    check_args!(new_pos < self.get_len()?);
+    Ok(())
+  }
+
+  fn do_read(&mut self, buf: &mut [u8]) -> Result<usize> {
+    self.do_seek_to()?;
+
+    if let Some(ref mut block_reader) = self.cur_block_reader {
+      Ok(block_reader.read(buf).context(HdfsLibErrorKind::IoError)?)
+    } else {
+      Err(HdfsLibError::from(IllegalStateError(format!("{}", "Block reader should not be empty!"))))
+    }
+  }
+
+  fn do_seek_to(&mut self) -> Result<()> {
+    if self.seek_pos >= self.pos {
+      if let Some(ref mut block_reader) = self.cur_block_reader {
+        let diff = self.seek_pos - self.pos;
+        if diff < block_reader.available()? {
+          let skipped = block_reader.skip(diff)?;
+          check_state!(
+            skipped == diff,
+            "Block reader error: only skipped {} bytes, expected to skip {} bytes",
+            skipped,
+            diff
+          );
+
+          self.pos = self.seek_pos;
+          return Ok(());
         }
-
-        Ok(())
+      }
     }
 
-    fn do_seek_to_new_block(&mut self) -> Result<()> {
-        let new_block_idx = self.fetch_located_block()?;
-        let _new_data_node = self.choose_datanode(new_block_idx)?;
-
-        unimplemented!()
-    }
-
-    fn fetch_located_block(&mut self) -> Result<usize> {
-        if let Some(idx) = self.blocks.search_block(self.pos) {
-            return Ok(idx);
-        }
-
-        debug!(
-            "Trying to fetch block location of file [{}] with offset [{}]",
-            &self.file_path, self.pos
+    self.read_block_failures = 0;
+    // We need to seek to new block now
+    while self.read_block_failures < self.config.max_block_acquire_failures() {
+      if let Err(e) = self.do_seek_to_new_block() {
+        self.read_block_failures += 1;
+        warn!(
+          "Failed to read block seek to pos [{}] of file [{}] for {} times, error: {:?}",
+          self.seek_pos, self.file_path, self.read_block_failures, e
         );
 
-        let located_blocks = self
-            .name_node
-            .get_block_locations(&self.file_path, self.pos, 1)?;
-
-        located_blocks
-            .blocks()
-            .try_for_each(|b| self.blocks.add_block(b).map(|_v| ()))?;
-
-        self.blocks.search_block(self.pos).ok_or_else(|| {
-            HdfsLibErrorKind::SystemError(format!(
-                "Unable to find block with \
-            offset [{}] for file [{}].",
-                self.pos, self.file_path
-            ))
-            .into()
-        })
+        if let Some(ref datanode) = self.cur_datanode {
+          self.dead_nodes.insert(datanode.clone());
+        }
+      } else {
+        break;
+      }
     }
 
-    fn choose_datanode(&self, block_idx: usize) -> Result<DatanodeInfo> {
-        self.blocks
-            .get_block(block_idx)
-            .and_then(|b| b.location(0))
-            .map(|datanode| datanode.datanode_info())
-            .ok_or_else(|| {
-                sys_err!(
-                    "Unable to find datanode information for block index: {}",
-                    block_idx
-                )
-            })
+    if self.read_block_failures >= self.config.max_block_acquire_failures() {
+      let error_info = MissingBlockErrorInfo::new(
+        self.cur_block.as_ref().map(|b| b.block().clone()),
+        self.file_path.clone(),
+        self.seek_pos,
+      );
+      error!("Failed to seek to {} for {} times, which exceeded max failures: {}, will throw missing block error", self.seek_pos, self.read_block_failures, self.config.max_block_acquire_failures());
+      return Err(HdfsLibError::from(MissingBlockError(error_info)));
     }
+
+    self.pos = self.seek_pos;
+    Ok(())
+  }
+
+  fn do_seek_to_new_block(&mut self) -> Result<()> {
+    let block = self.do_find_block(self.seek_pos)?;
+    match self.choose_datanode(&block) {
+      Ok(datanode) => {
+        let block_reader_args = BlockReaderArgs::new(
+          self.seek_pos - block.offset(),
+          block.get_len(),
+          false,
+          "test_client".to_string(),
+          datanode.clone(),
+          self.file_path.clone(),
+          block.block().clone(),
+        );
+
+        self.cur_block = Some(block);
+        self.cur_datanode = Some(datanode);
+
+        let block_reader = self.block_reader_factory.create(block_reader_args)?;
+
+        self.cur_block_reader = Some(block_reader);
+        Ok(())
+      }
+      Err(e) => {
+        self.fetch_block_locations(self.seek_pos)?;
+        Err(e)
+      }
+    }
+  }
+
+  fn do_find_block(&mut self, pos: usize) -> Result<LocatedBlock> {
+    let new_block = self.blocks.find_block(pos);
+
+    if new_block.is_none() {
+      self.fetch_block_locations(pos)?;
+    }
+
+    if let Some(new_block) = self.blocks.find_block(pos) {
+      Ok(new_block.clone())
+    } else {
+      Err(HdfsLibError::from(IllegalStateError(format!(
+        "Can't find block at pos [{}] in [{}]",
+        self.pos, self.file_path
+      ))))
+    }
+  }
+
+  fn fetch_block_locations(&mut self, pos: usize) -> Result<()> {
+    debug!(
+      "Trying to fetch block location of file [{}] with offset [{}]",
+      &self.file_path, self.pos
+    );
+
+    let located_blocks = self.name_node.get_block_locations(&self.file_path, pos, 1)?;
+
+    located_blocks.blocks().try_for_each(|b| self.blocks.add_block(b).map(|_v| ()))?;
+
+    Ok(())
+  }
+
+  fn choose_datanode(&self, cur_block: &LocatedBlock) -> Result<DatanodeInfo> {
+    for loc in cur_block.locations() {
+      if !self.dead_nodes.contains(loc.datanode_info()) {
+        return Ok(loc.datanode_info().clone());
+      }
+    }
+
+    Err(HdfsLibError::from(IllegalStateError(format!(
+      "No live datanode for block: {:?}, file: {:?}, deadnodes: {:?}",
+      cur_block, self.file_path, self.dead_nodes
+    ))))
+  }
 }

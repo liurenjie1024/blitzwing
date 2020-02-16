@@ -1,12 +1,9 @@
 pub struct AuthMethod {
-    _code: i8,
-    _mechanism_name: &'static str,
+  _code: i8,
+  _mechanism_name: &'static str,
 }
 
-pub const AUTH_METHOD_SIMPLE: AuthMethod = AuthMethod {
-    _code: 80i8,
-    _mechanism_name: "",
-};
+pub const AUTH_METHOD_SIMPLE: AuthMethod = AuthMethod { _code: 80i8, _mechanism_name: "" };
 
 //pub const AUTH_METHOD_KERBEROS: AuthMethod = AuthMethod {
 //    code: 81i8,
@@ -26,14 +23,14 @@ pub const AUTH_METHOD_SIMPLE: AuthMethod = AuthMethod {
 //};
 
 pub struct AuthProtocol {
-    call_id: i32,
+  call_id: i32,
 }
 
 pub const AUTH_PROTOCOL_NONE: AuthProtocol = AuthProtocol { call_id: 0 };
 //pub const AUTH_PROTOCOL_SASL: AuthProtocol = AuthProtocol { call_id: -33 };
 
 impl AuthProtocol {
-    pub fn call_id(&self) -> i32 {
-        self.call_id
-    }
+  pub fn call_id(&self) -> i32 {
+    self.call_id
+  }
 }
