@@ -2,7 +2,7 @@ use crate::{config::ConfigRef, error::Result};
 
 use std::sync::Arc;
 
-pub type HdfsClientConfigRef = Arc<HdfsClientConfig>;
+pub(in crate::hdfs) type HdfsClientConfigRef = Arc<HdfsClientConfig>;
 
 const DFS_BLOCK_SIZE_KEY: &'static str = "dfs.block.size";
 const DFS_BLOCK_SIZE_DEFAULT: usize = 128 * 1024 * 1024;
@@ -21,7 +21,7 @@ const DFS_CLIENT_USE_DN_HOSTNAME: &'static str = "dfs.client.use.datanode.hostna
 const DFS_CLIENT_USE_DN_HOSTNAME_DEFAULT: bool = false;
 
 #[derive(Default, CopyGetters)]
-pub struct HdfsClientConfig {
+pub(in crate::hdfs) struct HdfsClientConfig {
   inner: ConfigRef,
 
   #[get_copy = "pub"]
@@ -37,7 +37,7 @@ pub struct HdfsClientConfig {
 }
 
 impl HdfsClientConfig {
-  pub fn new(inner: ConfigRef) -> Result<HdfsClientConfigRef> {
+  pub(in crate::hdfs) fn new(inner: ConfigRef) -> Result<HdfsClientConfigRef> {
     let default_block_size = inner.get_or(DFS_BLOCK_SIZE_KEY, DFS_BLOCK_SIZE_DEFAULT)?;
     let prefetch_size = inner.get_or(DFS_CLIENT_READ_PREFETCH_SIZE_KEY, 10 * default_block_size)?;
     let max_block_acquire_failures = inner.get_or(

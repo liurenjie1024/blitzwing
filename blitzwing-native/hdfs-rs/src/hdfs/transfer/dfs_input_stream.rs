@@ -20,12 +20,12 @@ use std::{
   result::Result as StdResult,
 };
 
-struct DFSInputStream {
+pub(in crate::hdfs) struct DFSInputStream {
   config: HdfsClientConfigRef,
-  name_node: ClientProtocolRef,
+  namenode: ClientProtocolRef,
   block_reader_factory: BlockReaderFactoryRef,
   blocks: LocatedBlocks,
-  file_path: String,
+  filename: String,
 
   pos: usize,
   seek_pos: usize,
@@ -39,14 +39,34 @@ struct DFSInputStream {
   cur_datanode: Option<DatanodeInfo>,
 }
 
-struct BlockReaderInfo {
-  block_reader: BlockReaderRef,
-  block: LocatedBlock,
+impl DFSInputStream {
+  pub(in crate::hdfs) fn new(
+    config: HdfsClientConfigRef,
+    namenode: ClientProtocolRef,
+    block_reader_factory: BlockReaderFactoryRef,
+    filename: &str,
+  ) -> Result<Self> {
+    let blocks = namenode.get_block_locations(filename, 0, config.prefetch_size())?;
+    Ok(Self {
+      config,
+      namenode,
+      block_reader_factory,
+      blocks,
+      filename: filename.to_string(),
+      pos: 0,
+      seek_pos: 0,
+      dead_nodes: HashSet::new(),
+      read_block_failures: 0,
+      cur_block_reader: None,
+      cur_block: None,
+      cur_datanode: None,
+    })
+  }
 }
 
 impl Read for DFSInputStream {
-  fn read(&mut self, _buf: &mut [u8]) -> StdResult<usize, IoError> {
-    unimplemented!()
+  fn read(&mut self, buf: &mut [u8]) -> StdResult<usize, IoError> {
+    self.do_read(buf).map_err(|e| e.into_std_io_error())
   }
 }
 
@@ -129,7 +149,7 @@ impl DFSInputStream {
         self.read_block_failures += 1;
         warn!(
           "Failed to read block seek to pos [{}] of file [{}] for {} times, error: {:?}",
-          self.seek_pos, self.file_path, self.read_block_failures, e
+          self.seek_pos, self.filename, self.read_block_failures, e
         );
 
         if let Some(ref datanode) = self.cur_datanode {
@@ -143,7 +163,7 @@ impl DFSInputStream {
     if self.read_block_failures >= self.config.max_block_acquire_failures() {
       let error_info = MissingBlockErrorInfo::new(
         self.cur_block.as_ref().map(|b| b.block().clone()),
-        self.file_path.clone(),
+        self.filename.clone(),
         self.seek_pos,
       );
       error!("Failed to seek to {} for {} times, which exceeded max failures: {}, will throw missing block error", self.seek_pos, self.read_block_failures, self.config.max_block_acquire_failures());
@@ -164,7 +184,7 @@ impl DFSInputStream {
           false,
           "test_client".to_string(),
           datanode.clone(),
-          self.file_path.clone(),
+          self.filename.clone(),
           block.block().clone(),
         );
 
@@ -195,7 +215,7 @@ impl DFSInputStream {
     } else {
       Err(HdfsLibError::from(IllegalStateError(format!(
         "Can't find block at pos [{}] in [{}]",
-        self.pos, self.file_path
+        self.pos, self.filename
       ))))
     }
   }
@@ -203,10 +223,10 @@ impl DFSInputStream {
   fn fetch_block_locations(&mut self, pos: usize) -> Result<()> {
     debug!(
       "Trying to fetch block location of file [{}] with offset [{}]",
-      &self.file_path, self.pos
+      &self.filename, self.pos
     );
 
-    let located_blocks = self.name_node.get_block_locations(&self.file_path, pos, 1)?;
+    let located_blocks = self.namenode.get_block_locations(&self.filename, pos, 1)?;
 
     located_blocks.blocks().try_for_each(|b| self.blocks.add_block(b).map(|_v| ()))?;
 
@@ -222,7 +242,7 @@ impl DFSInputStream {
 
     Err(HdfsLibError::from(IllegalStateError(format!(
       "No live datanode for block: {:?}, file: {:?}, deadnodes: {:?}",
-      cur_block, self.file_path, self.dead_nodes
+      cur_block, self.filename, self.dead_nodes
     ))))
   }
 }

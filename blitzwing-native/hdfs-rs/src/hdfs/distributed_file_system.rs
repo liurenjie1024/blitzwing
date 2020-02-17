@@ -4,9 +4,14 @@ use crate::{
   fs::{
     file_status::FileStatus,
     file_system::{FileSystem, FileSystemRef},
+    input_stream::FsInputStreamRef,
     path::{FsPath, FsPathRef},
   },
-  hdfs::protocol::client_protocol::{ClientProtocol, RpcClientProtocol},
+  hdfs::{
+    hdfs_config::{HdfsClientConfig, HdfsClientConfigRef},
+    protocol::client_protocol::{ClientProtocolRef, RpcClientProtocol},
+    transfer::{block_io::RemoteBlockReaderFactory, dfs_input_stream::DFSInputStream},
+  },
   rpc::rpc_client::RpcClientBuilder,
 };
 use std::{convert::TryFrom, sync::Arc};
@@ -15,12 +20,23 @@ const DFS_SCHEMA: &'static str = "hdfs";
 
 pub struct DistributedFileSystem {
   _base_uri: FsPathRef,
-  name_node: Arc<dyn ClientProtocol>,
+  namenode: ClientProtocolRef,
+  config: HdfsClientConfigRef,
 }
 
 impl FileSystem for DistributedFileSystem {
   fn get_file_status(&self, path: &str) -> Result<FileStatus> {
-    self.name_node.get_file_info(path)
+    self.namenode.get_file_info(path)
+  }
+
+  fn open(&self, path: &str) -> Result<FsInputStreamRef> {
+    let block_reader_factory = Box::new(RemoteBlockReaderFactory::new(self.config.clone()));
+    Ok(Box::new(DFSInputStream::new(
+      self.config.clone(),
+      self.namenode.clone(),
+      block_reader_factory,
+      path,
+    )?) as FsInputStreamRef)
   }
 }
 
@@ -48,8 +64,9 @@ impl<'a> DFSBuilder<'a> {
     let rpc_client_ref =
       RpcClientBuilder::new(&base_uri.authority(), self.config.clone()).build()?;
 
-    let name_node = Arc::new(RpcClientProtocol::new(base_uri.clone(), rpc_client_ref.clone()));
+    let namenode = Arc::new(RpcClientProtocol::new(base_uri.clone(), rpc_client_ref.clone()));
+    let hdfs_config = HdfsClientConfig::new(self.config.clone())?;
 
-    Ok(Arc::new(DistributedFileSystem { _base_uri: base_uri, name_node }))
+    Ok(Arc::new(DistributedFileSystem { _base_uri: base_uri, namenode, config: hdfs_config }))
   }
 }

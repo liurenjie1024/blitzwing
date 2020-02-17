@@ -33,7 +33,7 @@ pub struct BaseBlockOpInfo {
 }
 
 #[derive(new, Getters, CopyGetters)]
-pub struct ReadBlockRequest {
+pub(in crate::hdfs) struct ReadBlockRequest {
   #[get = "pub"]
   base_info: BaseBlockOpInfo,
   //TODO: token, caching strategy
@@ -49,17 +49,17 @@ pub struct ReadBlockRequest {
 
 #[derive(new, CopyGetters)]
 #[get_copy = "pub"]
-pub struct ReadBlockResponse {
+pub(in crate::hdfs) struct ReadBlockResponse {
   first_chunk_offset: usize,
   bytes_per_checksum: usize,
 }
 
-pub struct DataTransferProtocol<'a, C> {
+pub(in crate::hdfs) struct DataTransferProtocol<'a, C> {
   connection: &'a mut C,
 }
 
 impl<'a, C: Connection> DataTransferProtocol<'a, C> {
-  pub fn new(connection: &'a mut C) -> Self {
+  pub(in crate::hdfs) fn new(connection: &'a mut C) -> Self {
     Self { connection }
   }
 

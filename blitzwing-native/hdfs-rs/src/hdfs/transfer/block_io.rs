@@ -20,14 +20,14 @@ use std::{
   io::{Read, Result as IoResult, Write},
 };
 
-pub(super) type BlockReaderRef = Box<dyn BlockReader>;
-pub(super) type BlockReaderFactoryRef = Box<dyn BlockReaderFactory>;
+pub(in crate::hdfs) type BlockReaderRef = Box<dyn BlockReader>;
+pub(in crate::hdfs) type BlockReaderFactoryRef = Box<dyn BlockReaderFactory>;
 
-pub(super) trait BlockReaderFactory {
+pub(in crate::hdfs) trait BlockReaderFactory {
   fn create(&mut self, args: BlockReaderArgs) -> Result<BlockReaderRef>;
 }
 
-pub(super) struct RemoteBlockReaderFactory {
+pub(in crate::hdfs) struct RemoteBlockReaderFactory {
   config: HdfsClientConfigRef,
 }
 
@@ -52,13 +52,19 @@ impl BlockReaderFactory for RemoteBlockReaderFactory {
   }
 }
 
-pub(super) trait BlockReader: Read {
+impl RemoteBlockReaderFactory {
+  pub(in crate::hdfs) fn new(config: HdfsClientConfigRef) -> Self {
+    Self { config }
+  }
+}
+
+pub(in crate::hdfs) trait BlockReader: Read {
   fn available(&self) -> Result<usize>;
   fn skip(&mut self, n: usize) -> Result<usize>;
 }
 
 #[derive(new)]
-pub(super) struct BlockReaderArgs {
+pub(in crate::hdfs) struct BlockReaderArgs {
   start_offset: usize,
   bytes_to_read: usize,
   verify_checksum: bool,

@@ -14,7 +14,7 @@ use std::{
   time::Duration,
 };
 
-pub trait Connection {
+pub(in crate::hdfs) trait Connection {
   type In: Read;
   type Out: Write;
 
@@ -52,7 +52,7 @@ impl Connection for TcpConnection {
   }
 }
 
-pub(crate) fn make_connection<A>(
+pub(in crate::hdfs) fn make_connection<A>(
   config: HdfsClientConfigRef,
   remote_address: A,
 ) -> Result<impl Connection>
