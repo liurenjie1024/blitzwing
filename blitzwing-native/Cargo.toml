@@ -1,5 +1,6 @@
 [workspace]
 members = [
   "hdfs-rs",
-  "hdfs-tools"
+  "hdfs-tools",
+  "blitzwing-engine"
 ]

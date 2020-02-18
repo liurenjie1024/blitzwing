@@ -1,0 +1,38 @@
+[package]
+name = "blitzwing-engine"
+version = "0.1.0"
+authors = ["Renjie Liu <renliu@ebay.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+jni = {version = "0.14.0", features = ["invocation"] }
+#arrow = "0.15.1"
+#parquet = "0.15.1"
+parquet = { path = "../../arrow/rust/parquet" }
+arrow = { path = "../../arrow/rust/arrow" }
+protobuf = "2.8.0"
+failure = "0.1.6"
+failure_derive = "0.1.6"
+
+[patch.crates-io]
+
+[lib]
+name = "arrow_executor_rs"
+path = "src/lib.rs"
+crate-type=["cdylib"]
+
+#[lib]
+#name = "arrow_executor_rs2"
+#path = "src/lib.rs"
+#
+#[[bin]]
+#name = "executor"
+#path = "src/bin/executor.rs"
+
+[profile.release]
+debug = 2
+lto = true
+opt-level = 3
+
