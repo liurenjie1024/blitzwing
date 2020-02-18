@@ -2,5 +2,4 @@
 members = [
   "hdfs-rs",
   "hdfs-tools",
-  "blitzwing-engine"
 ]

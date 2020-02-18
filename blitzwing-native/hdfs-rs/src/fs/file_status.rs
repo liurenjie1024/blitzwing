@@ -61,8 +61,8 @@ impl<'a> TryFrom<BuildArgs<'a>> for FileStatus {
   fn try_from(args: BuildArgs<'a>) -> Result<Self> {
     debug!("file status: {:?}", args);
     Ok(match args.proto.get_fileType() {
-      HdfsFileStatusProto_FileType::IS_FILE => FileStatus::Dir(DirInfo::try_from(args)?),
-      HdfsFileStatusProto_FileType::IS_DIR => FileStatus::File(FileInfo::try_from(args)?),
+      HdfsFileStatusProto_FileType::IS_FILE => FileStatus::File(FileInfo::try_from(args)?),
+      HdfsFileStatusProto_FileType::IS_DIR => FileStatus::Dir(DirInfo::try_from(args)?),
       _ => unimplemented!(),
     })
   }

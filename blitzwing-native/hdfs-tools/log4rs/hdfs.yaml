@@ -14,7 +14,7 @@ appenders:
       pattern: "{d(%Y-%m-%d %H:%M:%S)} {l} {f}:{L} - {m}{n}"
 
 root:
-  level: warn
+  level: debug
   appenders:
     - stdout
     - file

@@ -175,7 +175,9 @@ impl DFSInputStream {
   }
 
   fn do_seek_to_new_block(&mut self) -> Result<()> {
+    debug!("Trying to seek to pos [{}] of file [{}]", self.seek_pos, self.filename);
     let block = self.do_find_block(self.seek_pos)?;
+    debug!("Find block [{:?}], pos [{}], file [{}]", &block, self.seek_pos, self.filename);
     match self.choose_datanode(&block) {
       Ok(datanode) => {
         let block_reader_args = BlockReaderArgs::new(
