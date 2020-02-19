@@ -22,7 +22,7 @@ pub struct DatanodeInfo {
   datanode_id: DatanodeId,
 }
 
-#[derive(Debug, Clone, Default, Getters)]
+#[derive(Debug, Clone, Eq, PartialEq, Default, Getters)]
 #[get = "pub"]
 pub struct DatanodeInfoWithStorage {
   datanode_info: DatanodeInfo,

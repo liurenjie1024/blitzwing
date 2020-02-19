@@ -114,10 +114,19 @@ impl DFSInputStream {
   }
 
   fn do_read(&mut self, buf: &mut [u8]) -> Result<usize> {
+    if self.seek_pos >= self.get_len()? {
+      return Ok(0);
+    }
+
     self.do_seek_to()?;
 
     if let Some(ref mut block_reader) = self.cur_block_reader {
-      Ok(block_reader.read(buf).context(HdfsLibErrorKind::IoError)?)
+      let bytes_read = block_reader.read(buf).context(HdfsLibErrorKind::IoError)?;
+
+      self.pos += bytes_read;
+      self.seek_pos += bytes_read;
+
+      Ok(bytes_read)
     } else {
       Err(HdfsLibError::from(IllegalStateError(format!("{}", "Block reader should not be empty!"))))
     }
@@ -180,9 +189,13 @@ impl DFSInputStream {
     debug!("Find block [{:?}], pos [{}], file [{}]", &block, self.seek_pos, self.filename);
     match self.choose_datanode(&block) {
       Ok(datanode) => {
+        debug!("Choose datanode for block [{:?}], offset: [{}], datanode: [{:?}]", block, self.seek_pos, datanode);
+        
+        let block_start_offset = self.seek_pos - block.offset();
+        let block_bytes_to_read = block.get_len() - block_start_offset;
         let block_reader_args = BlockReaderArgs::new(
-          self.seek_pos - block.offset(),
-          block.get_len(),
+          block_start_offset,
+          block_bytes_to_read ,
           false,
           "test_client".to_string(),
           datanode.clone(),
@@ -231,6 +244,8 @@ impl DFSInputStream {
     let located_blocks = self.namenode.get_block_locations(&self.filename, pos, 1)?;
 
     located_blocks.blocks().try_for_each(|b| self.blocks.add_block(b).map(|_v| ()))?;
+
+    debug!("New all block locations: [{:?}], filename: [{:?}]", self.blocks, self.filename);
 
     Ok(())
   }

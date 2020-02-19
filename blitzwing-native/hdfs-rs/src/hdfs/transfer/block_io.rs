@@ -209,7 +209,7 @@ impl<C: Connection> RemoteBlockReader<C> {
       self.read_next_packet()?;
     }
 
-    let bytes_written = min(self.bytes_left_in_current_packet() as usize, buf.len());
+    let bytes_written = min(self.bytes_left_in_current_packet(), buf.len());
 
     let packet_data =
       &self.current_packet()?.data()[self.pos_in_packet..(self.pos_in_packet + bytes_written)];
@@ -217,7 +217,7 @@ impl<C: Connection> RemoteBlockReader<C> {
 
     self.pos_in_packet += bytes_written;
 
-    if self.bytes_to_read_remaining == 0 {
+    if self.bytes_to_read_remaining == 0 && self.bytes_left_in_current_packet() == 0 {
       self.read_next_packet()?;
       let status = if self.info.verify_checksum { Status::CHECKSUM_OK } else { Status::SUCCESS };
       self.write_read_status(status)?;
@@ -265,7 +265,7 @@ impl<C: Connection> BlockReader for RemoteBlockReader<C> {
     Ok(bytes_skipped)
   }
   fn available(&self) -> Result<usize> {
-    Ok(self.bytes_left_in_current_block() as usize)
+    Ok(self.bytes_left_in_current_block())
   }
 }
 
@@ -357,6 +357,22 @@ pub(crate) mod tests {
     block_reader.read_to_end(&mut read_content).expect("Failed to read block content");
 
     assert_eq!(block_content, read_content);
+  }
+
+  #[test]
+  fn test_read_block_multi_parts() {
+    let (mut block_reader, block_content) = prepare_block_reader(4);
+
+    let mut buf = [0u8;1];
+
+    for idx in 0..block_content.len() {
+      println!("Current idx: {}", idx);
+      block_reader.read_exact(&mut buf).expect("Read one by one should be ok!"); 
+      assert_eq!(block_content[idx], buf[0]);
+      assert_eq!(block_content.len()-idx-1, block_reader.available().expect("Get avaiable should succeed"));
+    }
+
+    assert_eq!(0, block_reader.read(&mut buf).expect("Read pass block should not fail"));
   }
 
   #[test]

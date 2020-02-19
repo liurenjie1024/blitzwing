@@ -48,7 +48,7 @@ fn read_file_content() -> Result<()> {
      let config = Arc::new(Configuration::new());
      let fs = make_file_system(&path, config)?;
   
-     let file_path = "/user/root/input/slaves";
+     let file_path = "/user/root/input/log4j.properties";
      let mut input = fs.open(file_path)?;
      let mut output = File::create("/tmp/out").context(IoError)?;
      copy(&mut input, &mut output).context(IoError)?;

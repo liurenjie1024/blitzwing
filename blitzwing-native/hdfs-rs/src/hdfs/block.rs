@@ -3,16 +3,12 @@ use crate::{
   hadoop_proto::hdfs::{
     DatanodeInfoProto, ExtendedBlockProto, LocatedBlockProto, LocatedBlocksProto,
   },
-  hdfs::{
-    block::OffsetOrRange::{Offset, Range as ORange},
-    datanode::{DatanodeInfo, DatanodeInfoWithStorage},
-  },
+  hdfs::datanode::{DatanodeInfo, DatanodeInfoWithStorage},
 };
-use failure::_core::cmp::Ordering;
 
 use crate::utils::proto::ProtobufTranslate;
 use protobuf::RepeatedField;
-use std::ops::Range;
+
 
 #[derive(Debug, Clone)]
 pub struct LocatedBlocks {
@@ -24,7 +20,7 @@ pub struct LocatedBlocks {
   last_block_complete: bool,
 }
 
-#[derive(Debug, Clone, Getters, CopyGetters)]
+#[derive(Debug, Clone, Eq, PartialEq, Getters, CopyGetters, Default)]
 pub struct LocatedBlock {
   #[get = "pub"]
   block: ExtendedBlock,
@@ -50,65 +46,6 @@ pub struct Block {
   generation_stamp: u64,
 }
 
-enum OffsetOrRange {
-  Offset(usize),
-  Range(Range<usize>),
-}
-
-impl OffsetOrRange {
-  pub fn offset(v: usize) -> Self {
-    OffsetOrRange::Offset(v)
-  }
-
-  pub fn range(v: Range<usize>) -> Self {
-    OffsetOrRange::Range(v)
-  }
-}
-
-impl OffsetOrRange {
-  fn order_of(offset: usize, range: &Range<usize>) -> Ordering {
-    if offset < range.start {
-      Ordering::Less
-    } else if range.end >= offset {
-      Ordering::Greater
-    } else {
-      Ordering::Equal
-    }
-  }
-
-  fn order_of_range(r1: &Range<usize>, r2: &Range<usize>) -> Ordering {
-    if r1.start != r2.start {
-      r1.start.cmp(&r2.start)
-    } else {
-      r1.end.cmp(&r2.end)
-    }
-  }
-}
-
-impl Eq for OffsetOrRange {}
-
-impl PartialEq for OffsetOrRange {
-  fn eq(&self, other: &Self) -> bool {
-    self.cmp(other) == Ordering::Equal
-  }
-}
-
-impl PartialOrd for OffsetOrRange {
-  fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-    Some(self.cmp(other))
-  }
-}
-
-impl Ord for OffsetOrRange {
-  fn cmp(&self, other: &Self) -> Ordering {
-    match (self, other) {
-      (Offset(s), Offset(o)) => s.cmp(o),
-      (ORange(s), ORange(o)) => OffsetOrRange::order_of_range(s, o),
-      (Offset(s), ORange(o)) => OffsetOrRange::order_of(*s, o),
-      (ORange(s), Offset(o)) => OffsetOrRange::order_of(*o, s),
-    }
-  }
-}
 
 impl LocatedBlocks {
   pub fn get_file_len(&self) -> usize {
@@ -131,12 +68,24 @@ impl LocatedBlocks {
   }
 
   pub fn find_block(&self, offset: usize) -> Option<&LocatedBlock> {
-    self
-      .blocks
-      .binary_search_by_key(&OffsetOrRange::offset(offset), |b| b.offset_range())
-      .ok()
-      .and_then(|i| self.block_at(i))
-  }
+    match self.blocks.binary_search_by_key(&offset, |b| b.offset) {
+      // The offset exactly hits the start of a block
+      Ok(idx) => self.block_at(idx),
+      Err(idx) => {
+        if idx == 0 {
+        // The offset is even smaller than the first block, this is possible because client may fetch block not starting from 0
+          None
+        } else {
+          // We need to double check whether previous block contains this offset
+          let prev_block = &self.blocks[idx - 1];
+          if prev_block.in_range(offset) {
+            Some(prev_block)
+          } else {
+            None
+          }
+        }
+      }
+    }}
 
   pub fn blocks(self) -> impl Iterator<Item = LocatedBlock> {
     self.blocks.into_iter()
@@ -144,8 +93,7 @@ impl LocatedBlocks {
 
   /// Add a new block or replace old block with same offset
   pub fn add_block(&mut self, block: LocatedBlock) -> Result<usize> {
-    let new_offset_range = block.offset_range();
-    match self.blocks.binary_search_by_key(&new_offset_range, |b| b.offset_range()) {
+    match self.blocks.binary_search_by_key(&block.offset, |b| b.offset) {
       Ok(idx) => {
         debug!(
           "Old block [{:?}] already exists, will be replaced with new block [{:?}].",
@@ -157,6 +105,7 @@ impl LocatedBlocks {
       }
       Err(idx) => {
         // block not found, will add to it
+        // TODO: Check that it doesn't overlap with other blocks
         self.blocks.insert(idx, block);
         Ok(idx)
       }
@@ -171,10 +120,6 @@ impl LocatedBlock {
 
   pub fn get_len(&self) -> usize {
     self.block.block.num_bytes
-  }
-
-  fn offset_range(&self) -> OffsetOrRange {
-    OffsetOrRange::range(self.offset..(self.offset + self.get_len()))
   }
 
   pub fn location(&self, idx: usize) -> Option<&DatanodeInfoWithStorage> {
@@ -282,13 +227,34 @@ impl ProtobufTranslate<LocatedBlocksProto> for LocatedBlocks {
 
 #[cfg(test)]
 mod tests {
-  use crate::hdfs::block::OffsetOrRange;
+  use super::*;
 
   #[test]
-  fn test_compare_offset_or_range() {
-    let offset = OffsetOrRange::Offset(10);
-    let range = OffsetOrRange::Range(5..10);
+  fn test_find_block() {
+    let mut block1 = LocatedBlock::default();
+    block1.offset = 0;
+    block1.block.block.num_bytes = 10;
 
-    assert!(offset != range);
+    let mut block2 = LocatedBlock::default();
+    block2.offset = 15;
+    block2.block.block.num_bytes = 10;
+
+    let blocks = LocatedBlocks {
+      file_len: 100,
+      last_block_complete: true,
+      last_located_block: None,
+      blocks: vec![block1.clone(), block2.clone()],
+      under_construction: false
+    };
+
+    assert_eq!(Some(&block1), blocks.find_block(0)); 
+    assert_eq!(Some(&block1), blocks.find_block(9)); 
+    assert_eq!(None, blocks.find_block(10)); 
+    assert_eq!(None, blocks.find_block(11)); 
+
+    assert_eq!(Some(&block2), blocks.find_block(15)); 
+    assert_eq!(Some(&block2), blocks.find_block(20)); 
+    assert_eq!(None, blocks.find_block(25)); 
+    assert_eq!(None, blocks.find_block(30)); 
   }
 }
