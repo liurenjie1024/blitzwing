@@ -1,0 +1,16 @@
+[package]
+name = "gsasl-rs"
+version = "0.1.0"
+authors = ["Renjie Liu <renliu@ebay.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[build-dependencies]
+bindgen = "0.53.1"
+
+[dependencies]
+failure = "0.1.6"
+failure_derive = "0.1.6"
+lazy_static = "1.4.0"
+derive-new = "0.5"
