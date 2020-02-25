@@ -17,6 +17,7 @@ lazy_static = "1.4.0"
 uuid = { version = "0.8", features = ["v4"]}
 derive-new = "0.5"
 getset = "0.1.0"
+gsasl-rs = { path = "../gsasl-rs" }
 
 [dev-dependencies]
 rand = "0.7"
