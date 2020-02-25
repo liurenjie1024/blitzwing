@@ -19,6 +19,8 @@ pub struct SaslError {
 pub enum SaslErrorKind {
   #[fail(display = "Can't find current sasl client's mechanism name.")]
   MechanismNameNotFound,
+  #[fail(display = "[{}] can't be converted to c compatible string.", _0)]
+  NotValidCString(String),
   #[fail(display = "Gsasl error: {:?}.", _0)]
   GsaslError(GsaslErrorInfo),
 }
