@@ -1,36 +1,116 @@
-pub struct AuthMethod {
-  _code: i8,
-  _mechanism_name: &'static str,
+use core::ops::Deref;
+
+pub(crate) enum AuthMethod {
+  Simple,
+  Kerberos,
+  Digest,
+  Token,
+  Plain
 }
 
-pub const AUTH_METHOD_SIMPLE: AuthMethod = AuthMethod { _code: 80i8, _mechanism_name: "" };
-
-//pub const AUTH_METHOD_KERBEROS: AuthMethod = AuthMethod {
-//    code: 81i8,
-//    mechanism_name: "GSSAPI",
-//};
-//pub const AUTH_METHOD_DIGEST: AuthMethod = AuthMethod {
-//    code: 82i8,
-//    mechanism_name: "DIGEST-MD5",
-//};
-//pub const AUTH_METHOD_TOKEN: AuthMethod = AuthMethod {
-//    code: 82i8,
-//    mechanism_name: "DIGEST-MD5",
-//};
-//pub const AUTH_METHOD_PLAIN: AuthMethod = AuthMethod {
-//    code: 83i8,
-//    mechanism_name: "PLAIN",
-//};
-
-pub struct AuthProtocol {
-  call_id: i32,
+pub(crate) struct AuthMethodValue {
+  code: i8,
+  mechanism_name: &'static str,
 }
 
-pub const AUTH_PROTOCOL_NONE: AuthProtocol = AuthProtocol { call_id: 0 };
-//pub const AUTH_PROTOCOL_SASL: AuthProtocol = AuthProtocol { call_id: -33 };
+impl AuthMethodValue {
+  pub(crate) fn code(&self) -> i8 {
+    self.code
+  }
+
+  pub(crate) fn mechanism_name(&self) -> &str {
+    self.mechanism_name
+  }
+}
+
+const AUTH_METHOD_SIMPLE: AuthMethodValue = AuthMethodValue { code: 80i8, mechanism_name: "" };
+
+const AUTH_METHOD_KERBEROS: AuthMethodValue = AuthMethodValue {
+   code: 81i8,
+   mechanism_name: "GSSAPI",
+};
+const AUTH_METHOD_DIGEST: AuthMethodValue = AuthMethodValue {
+   code: 82i8,
+   mechanism_name: "DIGEST-MD5",
+};
+const AUTH_METHOD_TOKEN: AuthMethodValue = AuthMethodValue {
+   code: 82i8,
+   mechanism_name: "DIGEST-MD5",
+};
+const AUTH_METHOD_PLAIN: AuthMethodValue = AuthMethodValue {
+   code: 83i8,
+   mechanism_name: "PLAIN",
+};
+
+impl Deref for AuthMethod {
+  type Target = AuthMethodValue;
+  fn deref(&self) -> &Self::Target {
+    match self {
+      AuthMethod::Simple => &AUTH_METHOD_SIMPLE,
+      AuthMethod::Kerberos => &AUTH_METHOD_KERBEROS,
+      AuthMethod::Digest => &AUTH_METHOD_DIGEST,
+      AuthMethod::Token => &AUTH_METHOD_DIGEST,
+      AuthMethod::Plain => &AUTH_METHOD_PLAIN,
+    }
+  }
+}
+
+pub(crate) enum AuthProtocol {
+  None,
+  Sasl,
+}
+
+pub(crate) struct AuthProtocolValue {
+  call_id: i32
+}
+
+const AUTH_PROTOCOL_NONE: AuthProtocolValue = AuthProtocolValue  { call_id: 0 };
+const AUTH_PROTOCOL_SASL: AuthProtocolValue = AuthProtocolValue { call_id: -33 };
+
+impl Deref for AuthProtocol {
+  type Target = AuthProtocolValue;
+
+  fn deref(&self) -> &Self::Target {
+    match self {
+      AuthProtocol::None => &AUTH_PROTOCOL_NONE,
+      AuthProtocol::Sasl => &AUTH_PROTOCOL_SASL
+    }
+  }
+}
 
 impl AuthProtocol {
-  pub fn call_id(&self) -> i32 {
+  pub(crate) fn call_id(&self) -> i32 {
     self.call_id
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use super::AuthMethod::*;
+  use super::AuthProtocol::*;
+
+  #[test]
+  fn test_auth_method() {
+    assert_eq!(80i8, Simple.code());
+    assert_eq!("", Simple.mechanism_name());
+
+    assert_eq!(81i8, Kerberos.code());
+    assert_eq!("GSSAPI", Kerberos.mechanism_name());
+
+    assert_eq!(82i8, Digest.code());
+    assert_eq!("DIGEST-MD5", Digest.mechanism_name());
+
+    assert_eq!(82i8, Token.code());
+    assert_eq!("DIGEST-MD5", Token.mechanism_name());
+
+    assert_eq!(83i8, Plain.code());
+    assert_eq!("PLAIN", Plain.mechanism_name());
+  }
+
+  #[test]
+  fn test_auth_protocol() {
+    assert_eq!(0,   AuthProtocol::None.call_id());
+    assert_eq!(-33, Sasl.call_id());
   }
 }

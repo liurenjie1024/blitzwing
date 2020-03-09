@@ -1,3 +1,13 @@
+use crate::rpc::message::receive_rpc_response;
+use crate::rpc::message::RpcResponse;
+use crate::rpc::message::send_rpc_request;
+use crate::rpc::constants::RPC_INVALID_RETRY_COUNT;
+use crate::rpc::constants::RPC_CURRENT_VERSION;
+use crate::rpc::constants::RPC_CONNECTION_CONTEXT_CALL_ID;
+use crate::rpc::constants::RPC_HEADER;
+use crate::rpc::constants::RPC_SERVICE_CLASS_DEFAULT;
+use crate::rpc::auth::AuthMethod::Simple;
+use crate::rpc::message::make_rpc_request_header;
 use crate::{
   error::{
     HdfsLibError, HdfsLibErrorKind,
@@ -11,7 +21,7 @@ use crate::{
     IpcConnectionContext::{IpcConnectionContextProto, UserInformationProto},
     RpcHeader::{RpcKindProto, RpcRequestHeaderProto, RpcRequestHeaderProto_OperationProto},
   },
-  rpc::auth::{AuthMethod, AuthProtocol, AUTH_METHOD_SIMPLE, AUTH_PROTOCOL_NONE},
+  rpc::auth::{AuthMethod, AuthProtocol},
 };
 
 use crate::{
@@ -44,36 +54,16 @@ use std::{
   time::Duration,
 };
 use tokio::{
-  io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadHalf, WriteHalf},
+  io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
   net::TcpStream,
   sync::mpsc::{channel as t_mpsc_channel, Receiver as TMpscReceiver, Sender as TMpscSender},
 };
 
-const RPC_HEADER: &'static str = "hrpc";
-const RPC_CURRENT_VERSION: u8 = 9;
-const RPC_SERVICE_CLASS_DEFAULT: i32 = 0;
-
-const RPC_CONNECTION_CONTEXT_CALL_ID: i32 = -3;
-const RPC_INVALID_RETRY_COUNT: i32 = -1;
 
 static CALL_ID: AtomicI32 = AtomicI32::new(1024);
 
 type ConnectionId = String;
 
-struct Response {
-  header: RpcResponseHeaderProto,
-  body: Bytes,
-}
-
-impl Debug for Response {
-  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-    let mut w = f.debug_list();
-    for b in &self.body {
-      w.entry(&b);
-    }
-    w.finish()
-  }
-}
 
 struct RpcCall {
   id: i32,
@@ -94,15 +84,15 @@ struct BasicRpcClientConfig {
 struct BasicRpcClientContext {
   endpoint: SocketAddr,
   service_class: i32,
-  auth_protocol: &'static AuthProtocol,
-  _auth_method: &'static AuthMethod,
+  auth_protocol: AuthProtocol,
+  _auth_method: AuthMethod,
   client_id: Bytes,
 }
 
 struct ConnectionContext {
   rpc_client_context: Arc<BasicRpcClientContext>,
   protocol: String,
-  calls: Arc<Mutex<HashMap<i32, MpscSyncSender<Result<Response>>>>>,
+  calls: Arc<Mutex<HashMap<i32, MpscSyncSender<Result<RpcResponse>>>>>,
   stopped: AtomicBool,
 }
 
@@ -156,14 +146,7 @@ impl ConnectionContext {
     retry_count: i32,
     rpc_op: RpcRequestHeaderProto_OperationProto,
   ) -> RpcRequestHeaderProto {
-    let mut rpc_request_header = RpcRequestHeaderProto::new();
-    rpc_request_header.set_rpcKind(RpcKindProto::RPC_PROTOCOL_BUFFER);
-    rpc_request_header.set_rpcOp(rpc_op);
-    rpc_request_header.set_callId(call_id);
-    rpc_request_header.set_clientId(self.rpc_client_context.client_id.to_vec());
-    rpc_request_header.set_retryCount(retry_count);
-
-    rpc_request_header
+    make_rpc_request_header(call_id, retry_count, rpc_op, &self.rpc_client_context.client_id)
   }
 
   fn is_stopped(&self) -> bool {
@@ -193,8 +176,8 @@ impl<'a> BasicRpcClientBuilder<'a> {
     let context = Arc::new(BasicRpcClientContext {
       endpoint,
       service_class: RPC_SERVICE_CLASS_DEFAULT,
-      auth_protocol: &AUTH_PROTOCOL_NONE,
-      _auth_method: &AUTH_METHOD_SIMPLE,
+      auth_protocol: AuthProtocol::None,
+      _auth_method: Simple,
       client_id: self.client_id,
     });
 
@@ -296,23 +279,13 @@ impl Connection {
 
     let timeout = Duration::from_secs(10);
     receiver.recv_timeout(timeout).context(HdfsLibErrorKind::TimeOutError(timeout))?.and_then(
-      |resp| {
-        let mut reader = resp.body.reader();
-        let mut input_stream = CodedInputStream::new(&mut reader);
-
-        match resp.header.get_status() {
-          RpcResponseHeaderProto_RpcStatusProto::SUCCESS => {
-            Ok(deserialize::<Response>(&mut input_stream)?)
-          }
-          _ => Err(HdfsLibErrorKind::RpcRemoteError(RpcRemoteErrorInfo::from(&resp.header)).into()),
-        }
-      },
+      |resp| { resp.get_message() },
     )
   }
 }
 
 impl ConnectionReader {
-  async fn run<T: AsyncRead>(self, reader: ReadHalf<T>) {
+  async fn run<T: AsyncRead + Unpin>(self, reader: T) {
     info!("Connection reader for [{:?}] started.", self.context);
     match self.do_run(reader).await {
       Ok(_) => info!("Connection reader for [{:?}] exited normally.", self.context),
@@ -320,33 +293,15 @@ impl ConnectionReader {
     }
   }
 
-  async fn do_run<T: AsyncRead>(&self, mut reader: ReadHalf<T>) -> Result<()> {
+  async fn do_run<T: AsyncRead + Unpin>(&self, mut reader: T) -> Result<()> {
     loop {
       if self.context.is_stopped() {
         info!("Stopping connection reader for [{:?}]", self.context);
         break;
       }
 
-      let response_length = reader.read_i32().await.context(IoError)? as usize;
-      let mut buffer = BytesMut::new();
-      buffer.resize(response_length, 0);
-      debug!(
-        "Connection reader context: {:?}, Response length is: {}",
-        &self.context, response_length
-      );
-
-      reader.read_exact(buffer.as_mut()).await.context(IoError)?;
-
-      let buffer = buffer.freeze();
-      debug!("Connection reader context: {:?}, response: {:?}", &self.context, buffer.as_ref());
-
-      let mut input_stream = CodedInputStream::from_bytes(buffer.as_ref());
-      let header =
-        deserialize::<RpcResponseHeaderProto>(&mut input_stream).context(ProtobufError)?;
-
-      let call_id = header.get_callId() as i32;
-
-      let resp_result = Ok(Response { header, body: buffer.slice(input_stream.pos() as usize..) });
+      let resp = receive_rpc_response(&mut reader).await?;
+      let call_id = resp.header.get_callId() as i32;
 
       match self.context.calls.lock() {
         Ok(calls) => {
@@ -358,7 +313,7 @@ impl ConnectionReader {
                 call_id
               )))
             })
-            .and_then(|s| s.send(resp_result).context(SyncError).map_err(|e| e.into()))
+            .and_then(|s| s.send(Ok(resp)).context(SyncError).map_err(|e| e.into()))
           {
             error!("Failed to process result of rpc call [{}], {}", call_id, e);
           }
@@ -374,7 +329,7 @@ impl ConnectionReader {
 }
 
 impl ConnectionWriter {
-  async fn run<T: AsyncWrite>(mut self, w: WriteHalf<T>) {
+  async fn run<T: AsyncWrite + Unpin>(mut self, w: T) {
     info!("Connection writer for [{:?}] started.", &self.context);
 
     match self.do_run(w).await {
@@ -383,7 +338,7 @@ impl ConnectionWriter {
     }
   }
 
-  async fn do_run<T: AsyncWrite>(&mut self, mut w: WriteHalf<T>) -> Result<()> {
+  async fn do_run<T: AsyncWrite + Unpin>(&mut self, mut w: T) -> Result<()> {
     loop {
       if self.context.is_stopped() {
         break;
@@ -481,20 +436,8 @@ impl ConnectionLoop {
       RpcRequestHeaderProto_OperationProto::RPC_FINAL_PACKET,
     );
 
-    let messages = [&header as &dyn Message, &body as &dyn Message];
-    let request = Messages::new(&messages);
-    let serialized_len = request.get_serialized_len()?;
-
-    let mut buffer = BytesMut::with_capacity(4 + serialized_len);
-    buffer.put_i32(serialized_len as i32);
-
-    let mut writer = buffer.writer();
-    request.serialize(&mut writer)?;
-
-    let buffer = writer.into_inner();
-
-    debug!("Writing connection context for [{:?}]: {:?}", &self, buffer.as_ref());
-    w.write_all(buffer.as_ref()).await.context(IoError)?;
+    debug!("Writing connection context for [{:?}]", &self);
+    send_rpc_request(w, &header, &body).await?;
     info!("Finished writing connection context for [{:?}]", &self);
 
     Ok(())
@@ -574,12 +517,3 @@ impl Debug for ConnectionContext {
       .finish()
   }
 }
-
-//#[cfg(test)]
-//mod tests {
-//
-//    #[test]
-//    fn test_deserialize() {
-//
-//    }
-//}
