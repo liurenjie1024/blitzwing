@@ -4,6 +4,7 @@ use crate::rpc::message::receive_rpc_response;
 use crate::rpc::message::send_rpc_request;
 use tokio::io::AsyncReadExt;
 use protobuf::Message;
+use crate::rpc::auth::AuthMethod;
 use tokio::io::AsyncWriteExt;
 use crate::hadoop_proto::RpcHeader::RpcRequestHeaderProto;
 use crate::rpc::constants::RPC_INVALID_RETRY_COUNT;
@@ -58,7 +59,36 @@ impl SaslProtocol {
     unimplemented!()
   }
 
-  fn select_sasl_client(&self, auth_types: &[RpcSaslProto_SaslAuth]) -> Result<(&RpcSaslProto_SaslAuth, Option<SaslClient>)> {
+  fn select_sasl_auth(&self, auth_types: &[RpcSaslProto_SaslAuth]) -> Result<(&RpcSaslProto_SaslAuth, Option<SaslClient>)> {
+    let sasl_client_ret = None;
+    let auth_type_ret = 
+
+    for auth_type in auth_types {
+      match AuthMethod::value_of(auth_type.get_method()) {
+        Ok(auth_method) => {
+          if auth_method.mechanism_name() != auth_type.get_mechanism() {
+            warn!("Auth method {:?} mechanism not match in server[{}] and client[{}]", auth_method, auth_type.get_mechanism(), auth_method.mechanism_name());
+            continue;
+          }
+
+          if auth_method == AuthMethod::Simple {
+            break;
+          }
+
+          if let Ok(sasl_client) = self.create_sasl_client(auth_type) {
+            sasl_client_ret = Some(sasl_client);
+            break;
+          } else {
+            info!("Failed to create sasl client for auth type: {:?}, will try next.", auth_type);
+          }
+        },
+        Err(e) => info!("Failed to find auth method: {}, will try next.", e)
+      } 
+   }
+    unimplemented!()
+  }
+
+  fn create_sasl_client(&self, auth_type: &RpcSaslProto_SaslAuth) -> Result<SaslClient> {
     unimplemented!()
   }
 }

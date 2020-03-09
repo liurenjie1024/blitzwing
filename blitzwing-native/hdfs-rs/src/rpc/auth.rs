@@ -1,5 +1,13 @@
-use core::ops::Deref;
+use crate::rpc::auth::AuthMethod::Token;
+use crate::rpc::auth::AuthMethod::Simple;
+use crate::rpc::auth::AuthMethod::Digest;
+use crate::rpc::auth::AuthMethod::Plain;
+use crate::rpc::auth::AuthMethod::Kerberos;
+use crate::error::{HdfsLibError, Result};
+use std::convert::TryFrom;
+use std::ops::Deref;
 
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum AuthMethod {
   Simple,
   Kerberos,
@@ -51,6 +59,19 @@ impl Deref for AuthMethod {
       AuthMethod::Digest => &AUTH_METHOD_DIGEST,
       AuthMethod::Token => &AUTH_METHOD_DIGEST,
       AuthMethod::Plain => &AUTH_METHOD_PLAIN,
+    }
+  }
+}
+
+impl AuthMethod {
+  pub(crate) fn value_of<T: AsRef<str>>(t: T) -> Result<Self> {
+    match t.as_ref() {
+      "SIMPLE" => Ok(Simple),
+      "KERBEROS" => Ok(Kerberos),
+      "DIGEST" => Ok(Digest),
+      "TOKEN" => Ok(Token),
+      "PLAIN" => Ok(Plain),
+      s => invalid_argument!("Unrecognized auth method name: {}", s) 
     }
   }
 }
