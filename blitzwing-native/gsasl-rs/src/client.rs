@@ -1,3 +1,4 @@
+use crate::bindings::Gsasl_property_GSASL_QOP;
 use crate::bindings::Gsasl_property_GSASL_HOSTNAME;
 use crate::bindings::Gsasl_property_GSASL_SERVICE;
 use crate::bindings::gsasl_property_set;
@@ -51,7 +52,7 @@ lazy_static! {
   };
 }
 
-#[derive(new)]
+#[derive(new, Debug)]
 pub struct GssApiInfo {
   client_principal: String,
   service: String,
@@ -103,6 +104,13 @@ impl Kind {
   }
 
   fn init_gsasl_properties(&self, gsasl_session: GsaslSessionPtr) -> Result<()> {
+    // TODO: Make this configurable
+    unsafe {
+      let gsasl_session = to_raw_mut(gsasl_session);
+      let c_qop = CString::new("qop-auth").context(NotValidCString("qop-auth".to_string()))?;
+      gsasl_property_set(gsasl_session, Gsasl_property_GSASL_QOP, c_qop.as_ptr());
+    }
+
     match self {
       Kind::GssApi(info) => info.init_gsasl_properties(gsasl_session)
     }
@@ -112,6 +120,7 @@ impl Kind {
 pub struct SaslClient {
   gsasl_session: GsaslSessionPtr,
   inner: Kind,
+  is_complete: bool,
 }
 
 fn new_session(kind: &Kind) -> Result<GsaslSessionPtr> {
@@ -137,7 +146,8 @@ fn new_sasl_client(kind: Kind) -> Result<SaslClient> {
 
   Ok(SaslClient {
     gsasl_session: session,
-    inner: kind
+    inner: kind,
+    is_complete: false,
   })
 }
 
@@ -154,10 +164,10 @@ impl SaslClient {
     self.inner.client_sends_data_first()
   }
 
-  pub fn step(&mut self, input: &[i8], output: &mut Vec<i8>) -> Result<bool> {
+  pub fn evaluate(&mut self, input: &[u8]) -> Result<Vec<u8>> {
     unsafe {
       let (mut output_ptr, mut output_len) = (null_mut(), 0u64);
-      let rc = gsasl_step(self.gsasl_session_ptr_mut(), input.as_ptr(), input.len() as u64, &mut output_ptr, &mut output_len);
+      let rc = gsasl_step(self.gsasl_session_ptr_mut(), input.as_ptr() as *const i8, input.len() as u64, &mut output_ptr, &mut output_len);
 
       let gsasl_rc = rc as Gsasl_rc;
 
@@ -165,14 +175,20 @@ impl SaslClient {
         return Err(SaslError::from_gsasl_rc(rc));
       }
 
-      let output_slice = std::slice::from_raw_parts_mut(output_ptr, output_len as usize);
+      let output_slice = std::slice::from_raw_parts_mut(output_ptr as *mut u8, output_len as usize);
+      let mut output = Vec::new();
 
       output.extend_from_slice(output_slice);
 
+      self.is_complete = gsasl_rc == Gsasl_rc_GSASL_NEEDS_MORE;
       gsasl_free(output_ptr as *mut c_void);
 
-      Ok(gsasl_rc == Gsasl_rc_GSASL_NEEDS_MORE)
+      Ok(output)
     }
+  }
+
+  pub fn is_complete(&self) -> bool {
+    self.is_complete
   }
 
   fn gsasl_session_ptr_mut(&self) -> *mut Gsasl_session {

@@ -12,10 +12,10 @@ use crate::{
   error::{
     HdfsLibError, HdfsLibErrorKind,
     HdfsLibErrorKind::{
-      IoError, LockError, ProtobufError, SocketAddressParseError, SyncError, SystemError,
+      IoError, LockError, SocketAddressParseError, SyncError, SystemError,
       TaskJoinError,
     },
-    Result, RpcRemoteErrorInfo,
+    Result,
   },
   hadoop_proto::{
     IpcConnectionContext::{IpcConnectionContextProto, UserInformationProto},
@@ -28,17 +28,16 @@ use crate::{
   config::ConfigRef,
   hadoop_proto::{
     ProtobufRpcEngine::RequestHeaderProto,
-    RpcHeader::{RpcResponseHeaderProto, RpcResponseHeaderProto_RpcStatusProto},
   },
-  rpc::message::{deserialize, Messages, RpcMessageSerialize},
+  rpc::message::{Messages, RpcMessageSerialize},
   rt::get_runtime,
 };
 use bytes::{
-  buf::ext::{BufExt, BufMutExt},
+  buf::ext::BufMutExt,
   BufMut, Bytes, BytesMut,
 };
 use failure::ResultExt;
-use protobuf::{CodedInputStream, Message};
+use protobuf::Message;
 use std::{
   collections::HashMap,
   fmt::{Debug, Formatter},
@@ -54,7 +53,7 @@ use std::{
   time::Duration,
 };
 use tokio::{
-  io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+  io::{split, AsyncRead, AsyncWrite, AsyncWriteExt},
   net::TcpStream,
   sync::mpsc::{channel as t_mpsc_channel, Receiver as TMpscReceiver, Sender as TMpscSender},
 };

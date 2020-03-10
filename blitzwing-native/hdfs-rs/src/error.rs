@@ -99,6 +99,8 @@ pub enum HdfsLibErrorKind {
   ConfigError(String),
   #[fail(display = "Error happened in hdfs client protocol: {}", _0)]
   ProtocolError(String),
+  #[fail(display = "Error in sasl client")]
+  SaslError,
 
   // Block operation related error
   #[fail(display = "Block operation failed: {:?}", _0)]
@@ -174,20 +176,25 @@ macro_rules! check_args {
     };
 }
 
+macro_rules! invalid_state {
+    ($fmt:expr, $($arg:tt)*) => {
+        return Err(crate::error::HdfsLibError::from
+        (crate::error::HdfsLibErrorKind::IllegalStateError(format!
+        ($fmt, $
+        ($arg)*))));
+    };
+}
+
 macro_rules! check_state {
     ($cond:expr) => {
         if !($cond) {
-            return Err(crate::error::HdfsLibError::from(
-                crate::error::HdfsLibErrorKind::IllegalStateError(
-                    format!("Illegal state: [{}]", stringify!($cond)))));
+          invalid_state!("Illegal state: [{}]", stringify!($cond));
         }
     };
     ($cond:expr, $fmt:expr, $($arg:tt)*) => {
         if !($cond) {
-            return Err(crate::error::HdfsLibError::from(
-                crate::error::HdfsLibErrorKind::IllegalStateError(
-                    format!("Illegal state: [{}], {}", stringify!($cond), format!($fmt, $
-                        ($arg)*)))));
+          invalid_state!("Illegal state: [{}], {}", stringify!($cond), format!($fmt, $
+                        ($arg)*));
         }
     };
 }

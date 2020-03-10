@@ -3,11 +3,10 @@ use crate::rpc::auth::AuthMethod::Simple;
 use crate::rpc::auth::AuthMethod::Digest;
 use crate::rpc::auth::AuthMethod::Plain;
 use crate::rpc::auth::AuthMethod::Kerberos;
-use crate::error::{HdfsLibError, Result};
-use std::convert::TryFrom;
+use crate::error::Result;
 use std::ops::Deref;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum AuthMethod {
   Simple,
   Kerberos,
@@ -108,7 +107,6 @@ impl AuthProtocol {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use super::AuthMethod::*;
   use super::AuthProtocol::*;
 
   #[test]

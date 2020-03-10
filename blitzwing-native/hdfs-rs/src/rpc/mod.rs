@@ -4,3 +4,4 @@ pub mod message;
 pub mod rpc_client;
 mod sasl;
 mod constants;
+pub(crate) mod user;
