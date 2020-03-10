@@ -471,6 +471,10 @@ impl ConnectionLoop {
     self.write_connection_header(&mut tcp_stream).await?;
     debug!("Finished writing connection header for {:?}", self);
 
+    if self.context.rpc_client_context.auth_protocol == AuthProtocol::Sasl {
+      // let sasl_rpc_client = SaslProtocol::new(self.context.protocol.clone(), )
+    }
+
     debug!("Starting to write connection context for {:?}", self);
     self.write_connection_context(&mut tcp_stream).await?;
     debug!("Finished writing connection context for {:?}", self);

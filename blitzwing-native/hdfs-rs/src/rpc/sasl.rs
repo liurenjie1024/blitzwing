@@ -1,3 +1,4 @@
+use crate::rpc::auth::AuthMethod::Simple;
 use crate::error::HdfsLibErrorKind::SaslError;
 use crate::rpc::user::SubjectRef;
 use gsasl_rs::client::SaslClient;
@@ -20,6 +21,7 @@ use gsasl_rs::client::GssApiInfo;
 lazy_static! {
   static ref SASL_HEADER: RpcRequestHeaderProto = make_rpc_request_header(Sasl.call_id(), RPC_INVALID_RETRY_COUNT, RPC_FINAL_PACKET, "");
 }
+#[derive(new)]
 pub(crate) struct SaslProtocol {
   rpc_protocol: String,
   subject: SubjectRef,
@@ -28,6 +30,7 @@ pub(crate) struct SaslProtocol {
 pub(crate) struct SaslRpcClient {
   subject: SubjectRef,
   sasl_client: Option<SaslClient>,
+  auth_method: AuthMethod,
 }
 
 impl SaslProtocol {
@@ -43,6 +46,7 @@ impl SaslProtocol {
 
     let mut request_body: RpcSaslProto = negotiate_request;
     let mut sasl_client_ret = None;
+    let mut auth_method_ret = Simple;
 
     loop {
       send_rpc_request(&mut output, &SASL_HEADER, &request_body).await?;
@@ -71,6 +75,7 @@ impl SaslProtocol {
             sasl_auth.clear_challenge();
             request_body = SaslProtocol::create_sasl_reply(sasl_auth, RpcSaslProto_SaslState::INITIATE, reply_token);
             sasl_client_ret = Some(sasl_client);
+            auth_method_ret = AuthMethod::value_of(auth_type.get_method())?;
           } else {
             // Simple auth, return
             sasl_client_ret = None;
@@ -103,7 +108,8 @@ impl SaslProtocol {
 
     Ok(SaslRpcClient {
       subject: self.subject.clone(),
-      sasl_client: sasl_client_ret
+      sasl_client: sasl_client_ret,
+      auth_method: auth_method_ret,
     })
   }
 
@@ -181,7 +187,7 @@ impl SaslProtocol {
 
 impl SaslRpcClient {
   pub(crate) fn is_simple(&self) -> bool {
-    self.sasl_client.is_none()
+    self.auth_method == Simple
   }
 }
 
