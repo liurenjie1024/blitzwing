@@ -68,6 +68,7 @@ impl Subject {
   pub fn fullname(&self) -> &str {
     self.user.fullname.as_str()
   }
+
 }
 
 /// Interfaces available only in crate
@@ -76,6 +77,13 @@ impl Subject {
     match (auth_method, &self.user.kind) {
       (AuthMethod::Kerberos, &UserKind::Kerberos) => true,
       _ => false,
+    }
+  }
+
+  pub(crate) fn is_security_enabled(&self) -> bool {
+    match self.user.kind {
+      UserKind::Simple => false,
+      _ => true
     }
   }
 }

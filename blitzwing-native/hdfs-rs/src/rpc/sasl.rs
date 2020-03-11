@@ -34,9 +34,8 @@ pub(crate) struct SaslRpcClient {
 }
 
 impl SaslProtocol {
-  pub(crate) async fn sasl_connect<In, Out>(self, mut input: In, mut output: Out) -> Result<SaslRpcClient> 
-  where In: AsyncReadExt + Unpin,
-        Out: AsyncWriteExt + Unpin
+  pub(crate) async fn sasl_connect<S>(self, stream: &mut S) -> Result<SaslRpcClient> 
+  where S: AsyncReadExt + AsyncWriteExt + Unpin,
   {
     let negotiate_request = {
       let mut r = RpcSaslProto::new();
@@ -49,8 +48,8 @@ impl SaslProtocol {
     let mut auth_method_ret = Simple;
 
     loop {
-      send_rpc_request(&mut output, &SASL_HEADER, &request_body).await?;
-      let response = receive_rpc_response(&mut input).await?
+      send_rpc_request(stream, &SASL_HEADER, &request_body).await?;
+      let response = receive_rpc_response(stream).await?
       .get_message::<RpcSaslProto>()?;
       debug!("Received sasl respons: {:?}", response);
 
@@ -186,8 +185,12 @@ impl SaslProtocol {
 }
 
 impl SaslRpcClient {
-  pub(crate) fn is_simple(&self) -> bool {
+  pub(crate) fn is_simple_auth(&self) -> bool {
     self.auth_method == Simple
+  }
+
+  pub(crate) fn auth_method(&self) -> AuthMethod {
+    self.auth_method
   }
 }
 

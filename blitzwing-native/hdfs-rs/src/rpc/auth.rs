@@ -75,11 +75,13 @@ impl AuthMethod {
   }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub(crate) enum AuthProtocol {
   None,
   Sasl,
 }
 
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub(crate) struct AuthProtocolValue {
   call_id: i32
 }
@@ -101,6 +103,13 @@ impl Deref for AuthProtocol {
 impl AuthProtocol {
   pub(crate) fn call_id(&self) -> i32 {
     self.call_id
+  }
+
+  pub(crate) fn is_secure(&self) -> bool {
+    match self {
+      AuthProtocol::None => false,
+      AuthProtocol::Sasl => true,
+    }
   }
 }
 

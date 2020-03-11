@@ -1,3 +1,4 @@
+use crate::rpc::sasl::SaslRpcClient;
 use crate::rpc::user::SubjectRef;
 use crate::rpc::message::receive_rpc_response;
 use crate::rpc::message::RpcResponse;
@@ -59,6 +60,8 @@ use tokio::{
   sync::mpsc::{channel as t_mpsc_channel, Receiver as TMpscReceiver, Sender as TMpscSender},
 };
 
+use crate::rpc::sasl::SaslProtocol;
+
 
 static CALL_ID: AtomicI32 = AtomicI32::new(1024);
 
@@ -101,6 +104,7 @@ struct ConnectionLoop {
   endpoint: SocketAddr,
   context: Arc<ConnectionContext>,
   event_queue: Option<TMpscReceiver<Event>>,
+  sasl_rpc_client: Option<SaslRpcClient>,
 }
 
 struct ConnectionReader {
@@ -175,10 +179,17 @@ impl<'a> BasicRpcClientBuilder<'a> {
       .ok_or_else(|| SocketAddressParseError(self.remote_address_str.to_string()))?;
 
     let config = Arc::new(BasicRpcClientConfig { _inner: self.config });
+
+    let auth_protocol = if self.user.is_security_enabled() {
+      AuthProtocol::Sasl
+    } else {
+      AuthProtocol::None
+    };
+
     let context = Arc::new(BasicRpcClientContext {
       endpoint,
       service_class: RPC_SERVICE_CLASS_DEFAULT,
-      auth_protocol: AuthProtocol::None,
+      auth_protocol,
       _auth_method: Simple,
       client_id: self.client_id,
       user: self.user.clone(),
@@ -207,6 +218,7 @@ impl BasicRpcClient {
       endpoint: self.context.endpoint,
       context: conn_context.clone(),
       event_queue: Some(receiver),
+      sasl_rpc_client: None,
     };
 
     get_runtime().spawn(async move { conn_loop.run().await });
@@ -475,9 +487,12 @@ impl ConnectionLoop {
     self.write_connection_header(&mut tcp_stream).await?;
     debug!("Finished writing connection header for {:?}", self);
 
-    // if self.context.rpc_client_context.auth_protocol == AuthProtocol::Sasl {
-    //   // let sasl_rpc_client = SaslProtocol::new(self.context.protocol.clone(), )
-    // }
+    if self.context.rpc_client_context.auth_protocol == AuthProtocol::Sasl {
+      debug!("Begin to do sasl authentication for {:?}", self);
+      let sasl_rpc_client = SaslProtocol::new(self.context.protocol.clone(), self.context.rpc_client_context.user.clone()).sasl_connect(&mut tcp_stream).await?;
+      debug!("Sasl authentication finished for {:?}, auth method is {:?}", self, sasl_rpc_client.auth_method());
+      self.sasl_rpc_client = Some(sasl_rpc_client);
+    }
 
     debug!("Starting to write connection context for {:?}", self);
     self.write_connection_context(&mut tcp_stream).await?;
