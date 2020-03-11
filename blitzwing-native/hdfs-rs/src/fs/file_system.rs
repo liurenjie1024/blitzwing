@@ -1,3 +1,4 @@
+use crate::rpc::user::SubjectRef;
 use crate::{
   config::ConfigRef,
   error::Result,
@@ -16,4 +17,10 @@ pub trait FileSystem {
 // Methods for creating file systems
 pub fn make_file_system(fs_path: &str, config: ConfigRef) -> Result<FileSystemRef> {
   DFSBuilder::new(fs_path, config).build()
+}
+
+pub fn make_file_system_with_user(fs_path: &str, config: ConfigRef, user: SubjectRef) -> Result<FileSystemRef> {
+  DFSBuilder::new(fs_path, config)
+    .with_user(user)
+    .build()
 }

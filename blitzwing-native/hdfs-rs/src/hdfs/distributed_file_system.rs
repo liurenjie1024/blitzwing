@@ -1,3 +1,4 @@
+use crate::rpc::user::{SubjectRef, Subject};
 use crate::{
   config::ConfigRef,
   error::{HdfsLibErrorKind::InvalidArgumentError, Result},
@@ -21,6 +22,7 @@ const DFS_SCHEMA: &'static str = "hdfs";
 pub struct DistributedFileSystem {
   _base_uri: FsPathRef,
   namenode: ClientProtocolRef,
+  user: SubjectRef,
   config: HdfsClientConfigRef,
 }
 
@@ -43,11 +45,17 @@ impl FileSystem for DistributedFileSystem {
 pub struct DFSBuilder<'a> {
   path: &'a str,
   config: ConfigRef,
+  subject: Option<SubjectRef>,
 }
 
 impl<'a> DFSBuilder<'a> {
   pub fn new(path: &'a str, config: ConfigRef) -> Self {
-    Self { path, config }
+    Self { path, config, subject: None, }
+  }
+
+  pub fn with_user(mut self, user: SubjectRef) -> Self {
+    self.subject = Some(user);
+    self
   }
 
   pub fn build(self) -> Result<FileSystemRef> {
@@ -58,15 +66,22 @@ impl<'a> DFSBuilder<'a> {
       );
     }
 
+    let user= if self.subject.is_none() {
+      Arc::new(Subject::from_os_user()?)
+    } else {
+      self.subject.unwrap()
+    };
+
     // TODO: Check authority
 
     let base_uri = Arc::new(path.base()?);
     let rpc_client_ref =
-      RpcClientBuilder::new(&base_uri.authority(), self.config.clone()).build()?;
+      RpcClientBuilder::new(&base_uri.authority(), self.config.clone(), user.clone()).build()?;
 
     let namenode = Arc::new(RpcClientProtocol::new(base_uri.clone(), rpc_client_ref.clone()));
     let hdfs_config = HdfsClientConfig::new(self.config.clone())?;
 
-    Ok(Arc::new(DistributedFileSystem { _base_uri: base_uri, namenode, config: hdfs_config }))
+
+    Ok(Arc::new(DistributedFileSystem { _base_uri: base_uri, namenode, config: hdfs_config, user }))
   }
 }

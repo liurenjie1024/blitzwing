@@ -2,6 +2,9 @@ use crate::rpc::auth::AuthMethod;
 use crate::error::Result;
 use std::sync::Arc;
 use regex::Regex;
+use users::get_current_username;
+use crate::error::HdfsLibError;
+use crate::error::HdfsLibErrorKind::FromOsStringError;
 
 lazy_static! {
   static ref KERBEROS_USER_NAME: Regex = Regex::new(r"(?P<short>\w+)(/(?P<host>[\w\-\.]+))?@(?P<domain>[\w\.]+)").expect("Failed to parse regular expression pattern for kerberos username!");
@@ -34,16 +37,22 @@ pub(crate) struct User {
 pub(crate) struct Credentials {
 }
 
-#[derive(Getters)]
-pub(crate) struct Subject {
-  #[get = "pub"]
+pub struct Subject {
   user: User,
   credential: Credentials
 }
 
-pub(crate) type SubjectRef = Arc<Subject>;
+pub type SubjectRef = Arc<Subject>;
 
+/// Public interfaces
 impl Subject {
+  pub fn from_os_user() -> Result<Self> {
+    Ok(Subject {
+      user: User::from_os_user()?,
+      credential: Credentials {}
+    })
+  }
+
   pub fn from_ticket_cache<S: AsRef<str>>(username: S) -> Result<Self> {
     Ok(Subject {
       user: User::from_kerberos_name(username)?,
@@ -51,13 +60,27 @@ impl Subject {
     })
   }
 
-  pub fn match_auth_method(&self, auth_method: AuthMethod) -> bool {
+
+  pub fn username(&self) -> &str {
+    self.user.shortname.as_str()
+  }
+
+  pub fn fullname(&self) -> &str {
+    self.user.fullname.as_str()
+  }
+}
+
+/// Interfaces available only in crate
+impl Subject {
+  pub(crate) fn match_auth_method(&self, auth_method: AuthMethod) -> bool {
     match (auth_method, &self.user.kind) {
       (AuthMethod::Kerberos, &UserKind::Kerberos) => true,
       _ => false,
     }
   }
 }
+
+
 
 impl User {
   fn from_kerberos_name<S: AsRef<str>>(name: S) -> Result<Self> {
@@ -68,6 +91,20 @@ impl User {
       fullname: kerberos_name.fullname(),
       kind: UserKind::Kerberos
     })
+  }
+
+  fn from_os_user() -> Result<Self> {
+    if let Some(username) = get_current_username() {
+      username.into_string()
+        .map_err(|os_string| HdfsLibError::from(FromOsStringError(os_string)))
+        .map(|name| User {
+          shortname: name.clone(),
+          fullname: name.clone(),
+          kind: UserKind::Simple
+        })
+    } else {
+      invalid_state!("{}", "Current user does not exist!");
+    }
   }
 }
 
@@ -164,4 +201,15 @@ mod tests {
       assert!(User::from_kerberos_name(source).is_err());
     }
   }
+
+  // #[test]
+  // fn test_os_user() {
+  //   let expected_user = User {
+  //     shortname: "renliu".to_string(),
+  //     fullname: "renliu".to_string(),
+  //     kind: UserKind::Simple,
+  //   };
+
+  //   assert_eq!(expected_user, User::from_os_user().expect("Failed to create os user!"));
+  // }
 }

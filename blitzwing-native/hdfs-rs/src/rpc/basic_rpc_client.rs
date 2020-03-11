@@ -1,3 +1,4 @@
+use crate::rpc::user::SubjectRef;
 use crate::rpc::message::receive_rpc_response;
 use crate::rpc::message::RpcResponse;
 use crate::rpc::message::send_rpc_request;
@@ -86,6 +87,7 @@ struct BasicRpcClientContext {
   auth_protocol: AuthProtocol,
   _auth_method: AuthMethod,
   client_id: Bytes,
+  user: SubjectRef,
 }
 
 struct ConnectionContext {
@@ -125,12 +127,13 @@ pub struct BasicRpcClientBuilder<'a> {
   remote_address_str: &'a str,
   client_id: Bytes,
   config: ConfigRef,
+  user: SubjectRef,
 }
 
 impl ConnectionContext {
   fn make_ipc_connection_context(&self) -> IpcConnectionContextProto {
     let mut user_info_proto = UserInformationProto::new();
-    user_info_proto.set_effectiveUser("renliu".to_string());
+    user_info_proto.set_effectiveUser(self.rpc_client_context.user.username().to_string());
 
     let mut ipc_conn_context_proto = IpcConnectionContextProto::new();
     ipc_conn_context_proto.set_protocol(self.protocol.to_string());
@@ -158,8 +161,8 @@ impl ConnectionContext {
 }
 
 impl<'a> BasicRpcClientBuilder<'a> {
-  pub fn new(remote_address_str: &'a str, client_id: Bytes, config: ConfigRef) -> Self {
-    Self { remote_address_str, client_id, config }
+  pub fn new(remote_address_str: &'a str, client_id: Bytes, config: ConfigRef, user: SubjectRef) -> Self {
+    Self { remote_address_str, client_id, config, user }
   }
 
   pub fn build(self) -> Result<BasicRpcClient> {
@@ -178,6 +181,7 @@ impl<'a> BasicRpcClientBuilder<'a> {
       auth_protocol: AuthProtocol::None,
       _auth_method: Simple,
       client_id: self.client_id,
+      user: self.user.clone(),
     });
 
     Ok(BasicRpcClient { _config: config, context, connections: Mutex::new(HashMap::new()) })

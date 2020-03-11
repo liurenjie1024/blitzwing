@@ -178,7 +178,7 @@ impl SaslProtocol {
   }
 
   fn create_gssapi_sasl_client(&self, auth_type: &RpcSaslProto_SaslAuth) -> Result<SaslClient> {
-    let gss_api_info = GssApiInfo::new(self.subject.user().fullname().clone(), auth_type.get_protocol().to_string(), auth_type.get_serverId().to_string());
+    let gss_api_info = GssApiInfo::new(self.subject.fullname().to_string(), auth_type.get_protocol().to_string(), auth_type.get_serverId().to_string());
 
     Ok(SaslClient::use_gss_api(gss_api_info)
       .context(SaslError)?)

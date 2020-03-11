@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use crate::{
   hadoop_proto::RpcHeader::{RpcResponseHeaderProto, RpcResponseHeaderProto_RpcErrorCodeProto},
   hdfs::block::ExtendedBlock,
@@ -79,6 +80,8 @@ pub enum HdfsLibErrorKind {
   IoError,
   #[fail(display = "Illegal utf8 string")]
   FromUtf8Error,
+  #[fail(display = "Can't convert from OsString[{:?}] to String", _0)]
+  FromOsStringError(OsString),
   #[fail(display = "Failed to get environment")]
   GetEnvError,
   #[fail(display = "Illegal path string")]

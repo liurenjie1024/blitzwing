@@ -17,6 +17,7 @@ extern crate derive_new;
 #[macro_use]
 extern crate getset;
 extern crate regex;
+extern crate users;
 
 pub mod config;
 #[macro_use]

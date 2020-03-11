@@ -1,3 +1,4 @@
+use crate::rpc::user::SubjectRef;
 use crate::{
   config::ConfigRef,
   error::{HdfsLibErrorKind::LockError, Result},
@@ -39,11 +40,12 @@ impl RpcClient {
 pub struct RpcClientBuilder<'a> {
   authority: &'a str,
   config: ConfigRef,
+  user: SubjectRef,
 }
 
 impl<'a> RpcClientBuilder<'a> {
-  pub fn new(authority: &'a str, config: ConfigRef) -> Self {
-    Self { authority, config }
+  pub fn new(authority: &'a str, config: ConfigRef, user: SubjectRef) -> Self {
+    Self { authority, config, user }
   }
 
   pub fn build(self) -> Result<RpcClientRef> {
@@ -67,7 +69,7 @@ impl<'a> RpcClientBuilder<'a> {
     let client_id = Bytes::copy_from_slice(client_uuid.as_bytes() as &[u8]);
 
     let inner =
-      BasicRpcClientBuilder::new(self.authority, client_id.clone(), self.config.clone()).build()?;
+      BasicRpcClientBuilder::new(self.authority, client_id.clone(), self.config.clone(), self.user.clone()).build()?;
 
     Ok(Arc::new(RpcClient { inner }))
   }
