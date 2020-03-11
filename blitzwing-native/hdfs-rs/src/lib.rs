@@ -16,6 +16,7 @@ extern crate uuid;
 extern crate derive_new;
 #[macro_use]
 extern crate getset;
+extern crate regex;
 
 pub mod config;
 #[macro_use]
