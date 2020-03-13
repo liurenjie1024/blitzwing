@@ -1,4 +1,4 @@
-package com.ebay.hadoop.blitzwing.parquet;
+package com.ebay.hadoop.blitzwing.arrow.adaptor.parquet;
 
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.hadoop.ParquetFileReader;
@@ -6,12 +6,12 @@ import org.apache.parquet.hadoop.ParquetFileReader;
 import java.util.Iterator;
 import java.util.List;
 
-public class ArrowReader implements Iterator<RecordBatch> {
-  private final ArrowReaderOptions options;
+public class ArrowParquetReader implements Iterator<RecordBatch> {
+  private final ArrowParquetReaderOptions options;
   private final List<ColumnDescriptor> columnDescriptors;
   private final ParquetFileReader parquetFileReader;
   
-  public ArrowReader(ArrowReaderOptions options, List<ColumnDescriptor> columnDescriptors, ParquetFileReader parquetFileReader) {
+  public ArrowParquetReader(ArrowParquetReaderOptions options, List<ColumnDescriptor> columnDescriptors, ParquetFileReader parquetFileReader) {
     this.options = options;
     this.columnDescriptors = columnDescriptors;
     this.parquetFileReader = parquetFileReader;

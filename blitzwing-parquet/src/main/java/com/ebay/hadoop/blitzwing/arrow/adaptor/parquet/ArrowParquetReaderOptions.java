@@ -1,9 +1,9 @@
-package com.ebay.hadoop.blitzwing.parquet;
+package com.ebay.hadoop.blitzwing.arrow.adaptor.parquet;
 
-public class ArrowReaderOptions {
+public class ArrowParquetReaderOptions {
   private final int batchSize;
   
-  public ArrowReaderOptions(Builder builder) {
+  public ArrowParquetReaderOptions(Builder builder) {
     this.batchSize = builder.batchSize;
   }
   

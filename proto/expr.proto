@@ -1,0 +1,43 @@
+syntax = "proto2";
+
+import "types.proto";
+
+option java_package = "com.ebay.hadoop.arrow.executor.plan.exprs";
+option java_outer_classname = "ArrowExpression";
+
+enum AggregateOpration {
+    SUM = 1;
+}
+
+message AggExprNode {
+    required AggregateOpration operation = 1;
+}
+
+message LiteralNode {
+    required BasicType type = 1;
+
+    optional bool  bool_value = 11;
+    optional int32 int32_value = 12;
+    optional int64 int64_value = 13;
+    optional float float_value = 14;
+    optional double double_value = 15;
+}
+
+message Field {
+    optional string name = 1;
+    optional ExprType type = 2;
+    optional bool nullable = 3;
+}
+
+message FieldNode {
+    optional Field field = 1;
+}
+
+message ExprNode {
+    repeated ExprNode children = 1;
+    required ExprType expr_type = 2;
+    optional AggExprNode agg_node = 11;
+    optional LiteralNode literal_node = 12;
+    optional FieldNode field_node = 13;
+}
+

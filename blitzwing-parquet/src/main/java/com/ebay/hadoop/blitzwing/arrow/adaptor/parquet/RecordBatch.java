@@ -1,4 +1,4 @@
-package com.ebay.hadoop.blitzwing.parquet;
+package com.ebay.hadoop.blitzwing.arrow.adaptor.parquet;
 
 import org.apache.arrow.vector.ValueVector;
 

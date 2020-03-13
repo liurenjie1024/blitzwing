@@ -1,0 +1,41 @@
+syntax = "proto2";
+
+option java_package="com.ebay.hadoop.arrow.executor.plan";
+option java_outer_classname = "ArrowPlan";
+
+import "expr.proto";
+import "types.proto";
+
+enum NodeType {
+    AGG_NODE = 1;
+    JNI_INPUT_NODE = 2;
+    PARQUET_FILE_SCAN_NODE = 3;
+}
+
+message AggregationNode {
+    required bool final = 1;
+    repeated ExprNode groups = 2;
+    repeated ExprNode aggregations = 3;
+}
+
+message ParquetFileScanNode {
+    required string path = 1;
+    required Schema schema = 2;
+}
+
+message JniInputNode {
+    required Schema schema = 1;
+}
+
+message PlanNode {
+    required NodeType node_type = 1;
+
+    optional AggregationNode agg_node = 10;
+    optional JniInputNode jni_input_node = 11;
+    optional ParquetFileScanNode parquet_file_scan_node = 12;
+}
+
+message Plan {
+    repeated PlanNode plan_nodes = 1;
+}
+
