@@ -25,6 +25,7 @@ allprojects {
     version = "1.0-SNAPSHOT"
 
     repositories {
+        mavenLocal()
         maven { url = uri("https://ebaycentral.qa.ebay.com/content/repositories/releases/") }
         maven { url = uri("https://ebaycentral.qa.ebay.com/content/repositories/v3debt/") }
         maven { url = uri("https://ebaycentral.qa.ebay.com/content/repositories/snapshots/") }

@@ -1,0 +1,20 @@
+syntax = "proto2";
+
+option java_package="com.ebay.hadoop.blitzwing.generated.vector";
+option java_outer_classname = "RecordBatchProto";
+
+message JniValueNodeProto {
+    required int32 length = 1;
+    required int32 null_count = 2;
+}
+
+message JniBufferNodeProto {
+    required int64 address = 1;
+    required int32 length = 2;
+}
+
+message JniRecordBatchProto {
+    required int32 length = 1;
+    repeated JniValueNodeProto nodes = 2;
+    repeated JniBufferNodeProto buffers = 3;
+}

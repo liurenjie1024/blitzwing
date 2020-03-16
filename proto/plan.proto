@@ -20,11 +20,11 @@ message AggregationNode {
 
 message ParquetFileScanNode {
     required string path = 1;
-    required Schema schema = 2;
+    required SchemaProto schema = 2;
 }
 
 message JniInputNode {
-    required Schema schema = 1;
+    required SchemaProto schema = 1;
 }
 
 message PlanNode {

@@ -1,16 +1,14 @@
 package com.ebay.hadoop.blitzwing.vector;
 
+import com.ebay.hadoop.blitzwing.generated.vector.RecordBatchProto.JniBufferNodeProto;
+import com.ebay.hadoop.blitzwing.generated.vector.RecordBatchProto.JniRecordBatchProto;
 import com.ebay.hadoop.blitzwing.memory.ArrowBufferWrapper;
 import com.ebay.hadoop.blitzwing.memory.ArrowReferenceManager;
 import com.ebay.hadoop.blitzwing.memory.MemoryManager;
-import com.ebay.hadoop.blitzwing.vector.DataExchange.JniBufferNode;
-import com.ebay.hadoop.blitzwing.vector.DataExchange.JniRecordBatch;
 import io.netty.buffer.ArrowBuf;
+import java.util.List;
 import java.util.stream.Collectors;
 import org.apache.arrow.vector.FieldVector;
-import org.apache.arrow.vector.ValueVector;
-
-import java.util.List;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode;
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch;
@@ -32,7 +30,7 @@ public class RecordBatch {
     return columns;
   }
 
-  public static ArrowRecordBatch build(JniRecordBatch jniRecordBatch, MemoryManager memoryManager) {
+  public static ArrowRecordBatch build(JniRecordBatchProto jniRecordBatch, MemoryManager memoryManager) {
     List<ArrowFieldNode> fieldNodes = jniRecordBatch.getNodesList().stream()
         .map(n -> new ArrowFieldNode(n.getLength(), n.getNullCount()))
         .collect(Collectors.toList());
@@ -44,7 +42,7 @@ public class RecordBatch {
     return new ArrowRecordBatch(jniRecordBatch.getLength(), fieldNodes, buffers);
   }
 
-  public static ArrowBuf toArrowBuf(JniBufferNode b, MemoryManager memoryManager) {
+  public static ArrowBuf toArrowBuf(JniBufferNodeProto b, MemoryManager memoryManager) {
     ArrowBufferWrapper bufferWrapper = new ArrowBufferWrapper(memoryManager, b.getAddress(), b.getLength());
     ArrowReferenceManager refManager = new ArrowReferenceManager(bufferWrapper);
 

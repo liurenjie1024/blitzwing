@@ -1,0 +1,25 @@
+syntax = "proto2";
+
+option java_package="com.ebay.hadoop.blitzwing.generated.arrow.adaptor.parquet";
+option java_outer_classname = "ParquetProto";
+
+import "types.proto";
+
+message SegmentProto {
+  required int64 address = 1;
+  required int32 length = 2;
+}
+
+message ChunkProto {
+  required string  column_name = 1;
+  repeated SegmentProto segments = 2;
+}
+
+message RowGroupProto {
+  repeated ChunkProto chunks = 1;
+}
+
+message ParquetReaderProto {
+  required int32 batch_size = 1;
+  required SchemaProto schema = 2;
+}

@@ -4,7 +4,6 @@ import com.google.protobuf.gradle.protoc
 plugins {
     java
     id("com.google.protobuf") version "0.8.12"
-
 }
 
 dependencies {
@@ -29,6 +28,9 @@ sourceSets {
     main {
         java {
             srcDir(file("build/generated/source/proto/main/java"))
+        }
+        proto {
+            srcDir("${rootDir}/proto")
         }
     }
 }

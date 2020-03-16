@@ -14,7 +14,7 @@ message AggExprNode {
 }
 
 message LiteralNode {
-    required BasicType type = 1;
+    required BasicTypeProto type = 1;
 
     optional bool  bool_value = 11;
     optional int32 int32_value = 12;
@@ -25,7 +25,7 @@ message LiteralNode {
 
 message Field {
     optional string name = 1;
-    optional ExprType type = 2;
+    optional ExprTypeProto type = 2;
     optional bool nullable = 3;
 }
 
@@ -35,7 +35,7 @@ message FieldNode {
 
 message ExprNode {
     repeated ExprNode children = 1;
-    required ExprType expr_type = 2;
+    required ExprTypeProto expr_type = 2;
     optional AggExprNode agg_node = 11;
     optional LiteralNode literal_node = 12;
     optional FieldNode field_node = 13;

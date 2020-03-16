@@ -1,9 +1,9 @@
 syntax = "proto2";
 
-option java_package = "com.ebay.hadoop.arrow.executor.plan.types";
-option java_outer_classname = "ArrowTypes";
+option java_package = "com.ebay.hadoop.blitzwing.generated.executor.plan.types";
+option java_outer_classname = "TypesProto";
 
-enum BasicType {
+enum BasicTypeProto {
     NONE = 0;     // arrow::Type::NA
     BOOL = 1;     // arrow::Type::BOOL
     UINT8 = 2;    // arrow::Type::UINT8
@@ -34,12 +34,12 @@ enum BasicType {
     MAP = 27;
 }
 
-message ExprType {
-    required BasicType basic_type = 1;
+message ExprTypeProto {
+    required BasicTypeProto basic_type = 1;
     required bool nullable = 2;
     optional string name = 3;
 }
 
-message Schema {
-    repeated ExprType fields = 1;
+message SchemaProto {
+    repeated ExprTypeProto fields = 1;
 }
