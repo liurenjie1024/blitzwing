@@ -3,6 +3,7 @@ members = [
   "hdfs-rs",
   "hdfs-tools",
   "gsasl-rs",
+  "blitzwing-parquet",
 ]
 
 [profile.release]

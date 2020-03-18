@@ -20,6 +20,10 @@ public class JniWrapper implements AutoCloseable {
     return JniRecordBatchProto.parseFrom(next(instanceId));
   }
 
+  public void freeBuffer(long address) {
+    freeBuffer(instanceId, address);
+  }
+
   @Override
   public void close() {
     close(instanceId);
@@ -32,5 +36,6 @@ public class JniWrapper implements AutoCloseable {
   public native static long newInstance(byte[] parquetReaderProto);
   public native static void setRowGroupData(long instanceId, byte[] rowGroupData);
   public native static byte[] next(long instanceId);
+  public native static void freeBuffer(long instanceId, long address);
   public native static void close(long instanceId);
 }
