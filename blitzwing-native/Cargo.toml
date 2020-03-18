@@ -4,9 +4,5 @@ members = [
   "hdfs-tools",
   "gsasl-rs",
   "blitzwing-parquet",
+  "blitzwing-common",
 ]
-
-[profile.release]
-debug = 2
-lto = true
-opt-level = 3
