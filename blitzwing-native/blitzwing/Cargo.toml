@@ -1,5 +1,5 @@
 [package]
-name = "blitzwing-parquet"
+name = "blitzwing"
 version = "0.1.0"
 authors = ["Renjie Liu <renliu@ebay.com>"]
 edition = "2018"

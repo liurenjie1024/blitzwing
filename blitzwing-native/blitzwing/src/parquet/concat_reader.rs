@@ -1,5 +1,6 @@
 use std::io::{Read, Result as IoResult};
 
+#[derive(new)]
 struct ConcatReader<T: Read> {
   readers: Vec<T>,
   idx: usize

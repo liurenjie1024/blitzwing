@@ -6,6 +6,12 @@ pub struct BlitzwingParquetError {
 }
 
 pub enum BlitzwingParquetErrorKind {
+  #[fail(display = "Parquet error happened")]
+  ParquetError,
+  #[fail(display = "Illegal argument: {}", _1)]
+  InvalidArgumentError(String),
+  #[fail(display = "Arrow error happened")]
+  ArrowError,
 }
 
 impl BlitzwingParquetError {
