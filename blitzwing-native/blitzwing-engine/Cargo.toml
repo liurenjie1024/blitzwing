@@ -18,6 +18,7 @@ failure_derive = "0.1.6"
 
 [patch.crates-io]
 
+
 [lib]
 name = "arrow_executor_rs"
 path = "src/lib.rs"

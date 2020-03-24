@@ -1,25 +1,28 @@
-use parquet::decoding::Decoder;
+use crate::error::BlitzwingErrorKind::FatalError;
+use parquet::decoding::get_decoder_simple;
+use parquet::memory::ByteBufferPtr;
+use crate::error::BlitzwingErrorKind::ParquetError;
+use std::cmp::min;
+use parquet::decoding::{Decoder, PlainDecoder, DictDecoder};
 use parquet::basic::Encoding;
+use parquet::column::page::Page;
 use std::collections::HashMap;
 use std::marker::PhantomData;
-use parquet::column::page::PageReader;
 use parquet::data_type::DataType as ParquetType;
 use parquet::encodings::levels::LevelDecoder;
-use std::cmp::max;
-
-use crate::error::{BlitzwingParquetErrorKind, Result};
+use crate::error::Result;
 use arrow::array::{BooleanBufferBuilder, BufferBuilderTrait};
 use failure::ResultExt;
+use crate::types::ColumnDescProtoPtr;
+use crate::util::concat_reader::PageReaderRef;
 
-
-pub struct RecordReader<T, P, B>
+pub struct RecordReader<T, B>
 where
     T: ParquetType,
-    P: PageReader,
     B: AsMut<[T::T]>,
 {
     batch_size: usize,
-    max_def_level: i16,
+    column_desc: ColumnDescProtoPtr,
 
     num_values: usize,
     num_nulls: usize,
@@ -27,7 +30,7 @@ where
     null_bitmap: BooleanBufferBuilder,
     def_levels: Vec<i16>,
 
-    page_reader: P,
+    page_reader: PageReaderRef,
 
     def_level_decoder: Option<LevelDecoder>,
     current_encoding: Option<Encoding>,
@@ -40,24 +43,23 @@ where
     num_decoded_values: usize,
 
     // Cache of decoders for existing encodings
-    decoders: HashMap<Encoding, Box<Decoder<T>>>,
+    decoders: HashMap<Encoding, Box<dyn Decoder<T>>>,
     phantom_data: PhantomData<T>,
 }
 
-impl<T, P, B> RecordReader<T, P, B> 
+impl<T, B> RecordReader<T, B> 
 where
     T: ParquetType,
-    P: PageReader,
     B: AsMut<[T::T]>,
 {
-    pub(crate) fn new(batch_size: u32, max_def_level: i16, buffer: B, page_reader: P) -> Result<Self> {
+    pub(crate) fn new(batch_size: usize, column_desc: ColumnDescProtoPtr, buffer: B, page_reader: PageReaderRef) -> Result<Self> {
         let null_bitmap = BooleanBufferBuilder::new(batch_size);
         let mut def_levels = Vec::with_capacity(batch_size);
-        def_levels.resize_default(batch_size);
+        def_levels.resize_with(batch_size, || 0);
 
         Ok(Self {
             batch_size,
-            max_def_level,
+            column_desc,
             num_values: 0,
             num_nulls: 0,
             parquet_data_buffer: buffer,
@@ -69,11 +71,11 @@ where
             num_buffered_values: 0,
             num_decoded_values: 0,
             decoders: HashMap::new(),
-            phantom_data
+            phantom_data: PhantomData,
         })
     }
 
-    pub(crate) fn set_data(&mut self, page_reader: P) {
+    pub(crate) fn set_data(&mut self, page_reader: PageReaderRef) {
         self.page_reader = page_reader;
         self.num_buffered_values = 0;
         self.num_decoded_values = 0;
@@ -81,7 +83,9 @@ where
 
     pub(crate) fn reset_batch(&mut self) {
         self.num_values = 0;
-        self.null_bitmap.finish_shared();
+        unsafe {
+            self.null_bitmap.finish_shared();
+        }
     }
 
     pub(crate) fn next_batch(&mut self) -> Result<()> {
@@ -96,12 +100,11 @@ where
                 self.num_buffered_values - self.num_decoded_values,
             );
 
-            let iter_num_nulls = 0;
+            let mut iter_num_nulls = 0;
             // If the field is required and non-repeated, there are no definition levels
-            if self.max_def_level > 0 {
+            if self.column_desc.get_max_def_level() > 0 {
                 self.read_def_levels(iter_batch_size)?;
 
-                let parquet_buffer = self.parquet_data_buffer.as_mut();
 
                 let mut cur_idx = self.num_values;
                 let end_idx = self.num_values + iter_batch_size;
@@ -111,24 +114,24 @@ where
                         break;
                     }
 
-                    let is_empty = self.def_levels[cur_idx] >= self.max_def_level;
+                    let is_empty = self.def_levels[cur_idx] >= self.max_def_level();
 
                     let mut end_idx_tmp = cur_idx + 1;
-                    while end_idx_tmp < end_idx && ((self.def_levels[end_idx_tmp] >= self.max_def_level) == is_empty) {
+                    while end_idx_tmp < end_idx && ((self.def_levels[end_idx_tmp] >= self.max_def_level()) == is_empty) {
                         end_idx_tmp += 1;
                     }
 
                     if !is_empty {
-                        self.read_values(&mut self.parquet_data_buffer[cur_idx..end_idx_tmp])?;
+                        self.read_values(cur_idx, end_idx_tmp)?;
                     } else {
-                        iter_num_nulls += (end_idx_tmp - cur_idx);
+                        iter_num_nulls += end_idx_tmp - cur_idx;
                     }
                     cur_idx = end_idx_tmp;
                 }
             } else {
-                let mut cur_idx = self.num_values;
+                let cur_idx = self.num_values;
                 let end_idx = self.num_values + iter_batch_size;
-                self.read_values(&mut self.parquet_data_buffer[cur_idx..end_idx])?;
+                self.read_values(cur_idx, end_idx)?;
             }
 
             self.num_decoded_values += iter_batch_size;
@@ -147,22 +150,34 @@ where
         self.num_values
     }
 
-    pub(crate) fn get_parquet_data(&mut self) -> &mut B {
+    pub(crate) fn parquet_data_mut(&mut self) -> &mut B {
         &mut self.parquet_data_buffer
+    }
+
+    pub(crate) fn parquet_data(&self) -> &B {
+        & self.parquet_data_buffer
     }
 
     pub(crate) fn get_null_bitmap(&mut self) -> &mut BooleanBufferBuilder {
         &mut self.null_bitmap
     }
 
+    fn max_def_level(&self) -> i16 {
+        self.column_desc.get_max_def_level() as i16
+    }
+
+    fn type_length(&self) -> i32 {
+        self.column_desc.get_type_length() as i32
+    }
+
     /// Reads a new page and set up the decoders for levels, values or dictionary.
     /// Returns false if there's no page left.
     fn read_new_page(&mut self) -> Result<bool> {
         loop {
-            match self.page_reader.get_next_page()? {
+            match self.page_reader.get_next_page().context(ParquetError)? {
                 // No more page to read
                 None => {
-                    self.current_page_reader = None
+                    return Ok(false)
                 },
                 Some(current_page) => {
                     match current_page {
@@ -177,31 +192,18 @@ where
                             num_values,
                             encoding,
                             def_level_encoding,
-                            rep_level_encoding,
+                            rep_level_encoding: _,
                             statistics: _,
                         } => {
-                            self.num_buffered_values = num_values;
+                            self.num_buffered_values = num_values as usize;
                             self.num_decoded_values = 0;
 
                             let mut buffer_ptr = buf;
 
-                            if self.desc.max_rep_level() > 0 {
-                                let mut rep_decoder = LevelDecoder::v1(
-                                    rep_level_encoding,
-                                    self.desc.max_rep_level(),
-                                );
-                                let total_bytes = rep_decoder.set_data(
-                                    self.num_buffered_values as usize,
-                                    buffer_ptr.all(),
-                                );
-                                buffer_ptr = buffer_ptr.start_from(total_bytes);
-                                self.rep_level_decoder = Some(rep_decoder);
-                            }
-
-                            if self.desc.max_def_level() > 0 {
+                            if self.max_def_level() > 0 {
                                 let mut def_decoder = LevelDecoder::v1(
                                     def_level_encoding,
-                                    self.desc.max_def_level(),
+                                    self.max_def_level(),
                                 );
                                 let total_bytes = def_decoder.set_data(
                                     self.num_buffered_values as usize,
@@ -229,35 +231,20 @@ where
                             num_nulls: _,
                             num_rows: _,
                             def_levels_byte_len,
-                            rep_levels_byte_len,
+                            rep_levels_byte_len: _,
                             is_compressed: _,
                             statistics: _,
                         } => {
-                            self.num_buffered_values = num_values;
+                            self.num_buffered_values = num_values as usize;
                             self.num_decoded_values = 0;
 
                             let mut offset = 0;
 
-                            // DataPage v2 only supports RLE encoding for repetition
-                            // levels
-                            if self.desc.max_rep_level() > 0 {
-                                let mut rep_decoder =
-                                    LevelDecoder::v2(self.desc.max_rep_level());
-                                let bytes_read = rep_decoder.set_data_range(
-                                    self.num_buffered_values as usize,
-                                    &buf,
-                                    offset,
-                                    rep_levels_byte_len as usize,
-                                );
-                                offset += bytes_read;
-                                self.rep_level_decoder = Some(rep_decoder);
-                            }
-
                             // DataPage v2 only supports RLE encoding for definition
                             // levels
-                            if self.desc.max_def_level() > 0 {
+                            if self.max_def_level() > 0 {
                                 let mut def_decoder =
-                                    LevelDecoder::v2(self.desc.max_def_level());
+                                    LevelDecoder::v2(self.max_def_level());
                                 let bytes_read = def_decoder.set_data_range(
                                     self.num_buffered_values as usize,
                                     &buf,
@@ -302,13 +289,13 @@ where
             // Search cache for data page decoder
             if !self.decoders.contains_key(&encoding) {
                 // Initialize decoder for this page
-                let data_decoder = get_decoder::<T>(self.desc.clone(), encoding)?;
+                let data_decoder = get_decoder_simple::<T>(self.type_length(), encoding).context(ParquetError)?;
                 self.decoders.insert(encoding, data_decoder);
             }
             self.decoders.get_mut(&encoding).unwrap()
         };
 
-        decoder.set_data(buffer_ptr.start_from(offset), len as usize)?;
+        decoder.set_data(buffer_ptr.start_from(offset), len as usize).context(ParquetError)?;
         self.current_encoding = Some(encoding);
         Ok(())
     }
@@ -331,17 +318,17 @@ where
     }
 
     #[inline]
-    fn read_def_levels(&mut self, num: u32) -> Result<usize> {
+    fn read_def_levels(&mut self, num: usize) -> Result<usize> {
         let level_decoder = self
             .def_level_decoder
             .as_mut()
             .expect("def_level_decoder be set");
         
-        level_decoder.get(&mut self.def_levels[self.num_buffered_values..])
+        Ok(level_decoder.get(&mut self.def_levels[self.num_values..(self.num_values + num)]).context(ParquetError)?)
     }
 
     #[inline]
-    fn read_values(&mut self, buffer: &mut [T::T]) -> Result<usize> {
+    fn read_values(&mut self, start: usize, end: usize) -> Result<usize> {
         let encoding = self
             .current_encoding
             .expect("current_encoding should be set");
@@ -349,8 +336,10 @@ where
             .decoders
             .get_mut(&encoding)
             .expect(format!("decoder for encoding {} should be set", encoding).as_str());
-        
-        current_decoder.get(buffer)
+
+        let buffer = &mut self.parquet_data_buffer.as_mut()[start..end];
+
+        Ok(current_decoder.get(buffer).context(ParquetError)?)
     }
 
     #[inline]
@@ -361,20 +350,20 @@ where
         }
 
         if self.decoders.contains_key(&encoding) {
-            return Err(general_err!("Column cannot have more than one dictionary"));
+            return Err(FatalError("Column cannot have more than one dictionary".to_string()))?;
         }
 
         if encoding == Encoding::RLE_DICTIONARY {
-            let mut dictionary = PlainDecoder::<T>::new(self.desc.type_length());
+            let mut dictionary = PlainDecoder::<T>::new(self.type_length());
             let num_values = page.num_values();
-            dictionary.set_data(page.buffer().clone(), num_values as usize)?;
+            dictionary.set_data(page.buffer().clone(), num_values as usize).context(ParquetError)?;
 
             let mut decoder = DictDecoder::new();
-            decoder.set_dict(Box::new(dictionary))?;
+            decoder.set_dict(Box::new(dictionary)).context(ParquetError)?;
             self.decoders.insert(encoding, Box::new(decoder));
             Ok(true)
         } else {
-            Err(nyi_err!(
+            Err(nyi!(
                 "Invalid/Unsupported encoding type for dictionary: {}",
                 encoding
             ))

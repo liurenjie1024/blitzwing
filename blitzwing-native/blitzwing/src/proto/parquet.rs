@@ -510,6 +510,7 @@ impl ::protobuf::reflect::ProtobufValue for SegmentProto {
 pub struct ColumnChunkProto {
     // message fields
     column_name: ::protobuf::SingularField<::std::string::String>,
+    num_values: ::std::option::Option<i64>,
     segments: ::protobuf::RepeatedField<SegmentProto>,
     // special fields
     pub unknown_fields: ::protobuf::UnknownFields,
@@ -563,7 +564,26 @@ impl ColumnChunkProto {
         self.column_name.take().unwrap_or_else(|| ::std::string::String::new())
     }
 
-    // repeated .SegmentProto segments = 5;
+    // required int64 num_values = 2;
+
+
+    pub fn get_num_values(&self) -> i64 {
+        self.num_values.unwrap_or(0)
+    }
+    pub fn clear_num_values(&mut self) {
+        self.num_values = ::std::option::Option::None;
+    }
+
+    pub fn has_num_values(&self) -> bool {
+        self.num_values.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_num_values(&mut self, v: i64) {
+        self.num_values = ::std::option::Option::Some(v);
+    }
+
+    // repeated .SegmentProto segments = 3;
 
 
     pub fn get_segments(&self) -> &[SegmentProto] {
@@ -594,6 +614,9 @@ impl ::protobuf::Message for ColumnChunkProto {
         if self.column_name.is_none() {
             return false;
         }
+        if self.num_values.is_none() {
+            return false;
+        }
         for v in &self.segments {
             if !v.is_initialized() {
                 return false;
@@ -609,7 +632,14 @@ impl ::protobuf::Message for ColumnChunkProto {
                 1 => {
                     ::protobuf::rt::read_singular_string_into(wire_type, is, &mut self.column_name)?;
                 },
-                5 => {
+                2 => {
+                    if wire_type != ::protobuf::wire_format::WireTypeVarint {
+                        return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
+                    }
+                    let tmp = is.read_int64()?;
+                    self.num_values = ::std::option::Option::Some(tmp);
+                },
+                3 => {
                     ::protobuf::rt::read_repeated_message_into(wire_type, is, &mut self.segments)?;
                 },
                 _ => {
@@ -627,6 +657,9 @@ impl ::protobuf::Message for ColumnChunkProto {
         if let Some(ref v) = self.column_name.as_ref() {
             my_size += ::protobuf::rt::string_size(1, &v);
         }
+        if let Some(v) = self.num_values {
+            my_size += ::protobuf::rt::value_size(2, v, ::protobuf::wire_format::WireTypeVarint);
+        }
         for value in &self.segments {
             let len = value.compute_size();
             my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
@@ -640,8 +673,11 @@ impl ::protobuf::Message for ColumnChunkProto {
         if let Some(ref v) = self.column_name.as_ref() {
             os.write_string(1, &v)?;
         }
+        if let Some(v) = self.num_values {
+            os.write_int64(2, v)?;
+        }
         for v in &self.segments {
-            os.write_tag(5, ::protobuf::wire_format::WireTypeLengthDelimited)?;
+            os.write_tag(3, ::protobuf::wire_format::WireTypeLengthDelimited)?;
             os.write_raw_varint32(v.get_cached_size())?;
             v.write_to_with_cached_sizes(os)?;
         };
@@ -692,6 +728,11 @@ impl ::protobuf::Message for ColumnChunkProto {
                     |m: &ColumnChunkProto| { &m.column_name },
                     |m: &mut ColumnChunkProto| { &mut m.column_name },
                 ));
+                fields.push(::protobuf::reflect::accessor::make_option_accessor::<_, ::protobuf::types::ProtobufTypeInt64>(
+                    "num_values",
+                    |m: &ColumnChunkProto| { &m.num_values },
+                    |m: &mut ColumnChunkProto| { &mut m.num_values },
+                ));
                 fields.push(::protobuf::reflect::accessor::make_repeated_field_accessor::<_, ::protobuf::types::ProtobufTypeMessage<SegmentProto>>(
                     "segments",
                     |m: &ColumnChunkProto| { &m.segments },
@@ -720,6 +761,7 @@ impl ::protobuf::Message for ColumnChunkProto {
 impl ::protobuf::Clear for ColumnChunkProto {
     fn clear(&mut self) {
         self.column_name.clear();
+        self.num_values = ::std::option::Option::None;
         self.segments.clear();
         self.unknown_fields.clear();
     }
@@ -918,6 +960,7 @@ pub struct ColumnDescProto {
     // message fields
     column_name: ::protobuf::SingularField<::std::string::String>,
     max_def_level: ::std::option::Option<i32>,
+    type_length: ::std::option::Option<i32>,
     physical_type: ::std::option::Option<ParquetProto_PhysicalType>,
     compression: ::std::option::Option<ParquetProto_Compression>,
     // special fields
@@ -991,7 +1034,26 @@ impl ColumnDescProto {
         self.max_def_level = ::std::option::Option::Some(v);
     }
 
-    // required .ParquetProto.PhysicalType physical_type = 3;
+    // required int32 type_length = 3;
+
+
+    pub fn get_type_length(&self) -> i32 {
+        self.type_length.unwrap_or(0)
+    }
+    pub fn clear_type_length(&mut self) {
+        self.type_length = ::std::option::Option::None;
+    }
+
+    pub fn has_type_length(&self) -> bool {
+        self.type_length.is_some()
+    }
+
+    // Param is passed by value, moved
+    pub fn set_type_length(&mut self, v: i32) {
+        self.type_length = ::std::option::Option::Some(v);
+    }
+
+    // required .ParquetProto.PhysicalType physical_type = 4;
 
 
     pub fn get_physical_type(&self) -> ParquetProto_PhysicalType {
@@ -1010,7 +1072,7 @@ impl ColumnDescProto {
         self.physical_type = ::std::option::Option::Some(v);
     }
 
-    // required .ParquetProto.Compression compression = 4;
+    // required .ParquetProto.Compression compression = 5;
 
 
     pub fn get_compression(&self) -> ParquetProto_Compression {
@@ -1038,6 +1100,9 @@ impl ::protobuf::Message for ColumnDescProto {
         if self.max_def_level.is_none() {
             return false;
         }
+        if self.type_length.is_none() {
+            return false;
+        }
         if self.physical_type.is_none() {
             return false;
         }
@@ -1062,10 +1127,17 @@ impl ::protobuf::Message for ColumnDescProto {
                     self.max_def_level = ::std::option::Option::Some(tmp);
                 },
                 3 => {
-                    ::protobuf::rt::read_proto2_enum_with_unknown_fields_into(wire_type, is, &mut self.physical_type, 3, &mut self.unknown_fields)?
+                    if wire_type != ::protobuf::wire_format::WireTypeVarint {
+                        return ::std::result::Result::Err(::protobuf::rt::unexpected_wire_type(wire_type));
+                    }
+                    let tmp = is.read_int32()?;
+                    self.type_length = ::std::option::Option::Some(tmp);
                 },
                 4 => {
-                    ::protobuf::rt::read_proto2_enum_with_unknown_fields_into(wire_type, is, &mut self.compression, 4, &mut self.unknown_fields)?
+                    ::protobuf::rt::read_proto2_enum_with_unknown_fields_into(wire_type, is, &mut self.physical_type, 4, &mut self.unknown_fields)?
+                },
+                5 => {
+                    ::protobuf::rt::read_proto2_enum_with_unknown_fields_into(wire_type, is, &mut self.compression, 5, &mut self.unknown_fields)?
                 },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
@@ -1085,11 +1157,14 @@ impl ::protobuf::Message for ColumnDescProto {
         if let Some(v) = self.max_def_level {
             my_size += ::protobuf::rt::value_size(2, v, ::protobuf::wire_format::WireTypeVarint);
         }
+        if let Some(v) = self.type_length {
+            my_size += ::protobuf::rt::value_size(3, v, ::protobuf::wire_format::WireTypeVarint);
+        }
         if let Some(v) = self.physical_type {
-            my_size += ::protobuf::rt::enum_size(3, v);
+            my_size += ::protobuf::rt::enum_size(4, v);
         }
         if let Some(v) = self.compression {
-            my_size += ::protobuf::rt::enum_size(4, v);
+            my_size += ::protobuf::rt::enum_size(5, v);
         }
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
@@ -1103,11 +1178,14 @@ impl ::protobuf::Message for ColumnDescProto {
         if let Some(v) = self.max_def_level {
             os.write_int32(2, v)?;
         }
+        if let Some(v) = self.type_length {
+            os.write_int32(3, v)?;
+        }
         if let Some(v) = self.physical_type {
-            os.write_enum(3, v.value())?;
+            os.write_enum(4, v.value())?;
         }
         if let Some(v) = self.compression {
-            os.write_enum(4, v.value())?;
+            os.write_enum(5, v.value())?;
         }
         os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
@@ -1161,6 +1239,11 @@ impl ::protobuf::Message for ColumnDescProto {
                     |m: &ColumnDescProto| { &m.max_def_level },
                     |m: &mut ColumnDescProto| { &mut m.max_def_level },
                 ));
+                fields.push(::protobuf::reflect::accessor::make_option_accessor::<_, ::protobuf::types::ProtobufTypeInt32>(
+                    "type_length",
+                    |m: &ColumnDescProto| { &m.type_length },
+                    |m: &mut ColumnDescProto| { &mut m.type_length },
+                ));
                 fields.push(::protobuf::reflect::accessor::make_option_accessor::<_, ::protobuf::types::ProtobufTypeEnum<ParquetProto_PhysicalType>>(
                     "physical_type",
                     |m: &ColumnDescProto| { &m.physical_type },
@@ -1195,6 +1278,7 @@ impl ::protobuf::Clear for ColumnDescProto {
     fn clear(&mut self) {
         self.column_name.clear();
         self.max_def_level = ::std::option::Option::None;
+        self.type_length = ::std::option::Option::None;
         self.physical_type = ::std::option::Option::None;
         self.compression = ::std::option::Option::None;
         self.unknown_fields.clear();
@@ -1218,7 +1302,7 @@ pub struct ParquetReaderProto {
     // message fields
     batch_size: ::std::option::Option<i32>,
     column_desc: ::protobuf::RepeatedField<ColumnDescProto>,
-    schema: ::protobuf::SingularPtrField<super::types::SchemaProto>,
+    schema: ::protobuf::SingularField<::std::vec::Vec<u8>>,
     // special fields
     pub unknown_fields: ::protobuf::UnknownFields,
     pub cached_size: ::protobuf::CachedSize,
@@ -1279,11 +1363,14 @@ impl ParquetReaderProto {
         ::std::mem::replace(&mut self.column_desc, ::protobuf::RepeatedField::new())
     }
 
-    // required .SchemaProto schema = 3;
+    // required bytes schema = 3;
 
 
-    pub fn get_schema(&self) -> &super::types::SchemaProto {
-        self.schema.as_ref().unwrap_or_else(|| super::types::SchemaProto::default_instance())
+    pub fn get_schema(&self) -> &[u8] {
+        match self.schema.as_ref() {
+            Some(v) => &v,
+            None => &[],
+        }
     }
     pub fn clear_schema(&mut self) {
         self.schema.clear();
@@ -1294,13 +1381,13 @@ impl ParquetReaderProto {
     }
 
     // Param is passed by value, moved
-    pub fn set_schema(&mut self, v: super::types::SchemaProto) {
-        self.schema = ::protobuf::SingularPtrField::some(v);
+    pub fn set_schema(&mut self, v: ::std::vec::Vec<u8>) {
+        self.schema = ::protobuf::SingularField::some(v);
     }
 
     // Mutable pointer to the field.
     // If field is not initialized, it is initialized with default value first.
-    pub fn mut_schema(&mut self) -> &mut super::types::SchemaProto {
+    pub fn mut_schema(&mut self) -> &mut ::std::vec::Vec<u8> {
         if self.schema.is_none() {
             self.schema.set_default();
         }
@@ -1308,8 +1395,8 @@ impl ParquetReaderProto {
     }
 
     // Take field
-    pub fn take_schema(&mut self) -> super::types::SchemaProto {
-        self.schema.take().unwrap_or_else(|| super::types::SchemaProto::new())
+    pub fn take_schema(&mut self) -> ::std::vec::Vec<u8> {
+        self.schema.take().unwrap_or_else(|| ::std::vec::Vec::new())
     }
 }
 
@@ -1322,11 +1409,6 @@ impl ::protobuf::Message for ParquetReaderProto {
             return false;
         }
         for v in &self.column_desc {
-            if !v.is_initialized() {
-                return false;
-            }
-        };
-        for v in &self.schema {
             if !v.is_initialized() {
                 return false;
             }
@@ -1349,7 +1431,7 @@ impl ::protobuf::Message for ParquetReaderProto {
                     ::protobuf::rt::read_repeated_message_into(wire_type, is, &mut self.column_desc)?;
                 },
                 3 => {
-                    ::protobuf::rt::read_singular_message_into(wire_type, is, &mut self.schema)?;
+                    ::protobuf::rt::read_singular_bytes_into(wire_type, is, &mut self.schema)?;
                 },
                 _ => {
                     ::protobuf::rt::read_unknown_or_skip_group(field_number, wire_type, is, self.mut_unknown_fields())?;
@@ -1371,8 +1453,7 @@ impl ::protobuf::Message for ParquetReaderProto {
             my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
         };
         if let Some(ref v) = self.schema.as_ref() {
-            let len = v.compute_size();
-            my_size += 1 + ::protobuf::rt::compute_raw_varint32_size(len) + len;
+            my_size += ::protobuf::rt::bytes_size(3, &v);
         }
         my_size += ::protobuf::rt::unknown_fields_size(self.get_unknown_fields());
         self.cached_size.set(my_size);
@@ -1389,9 +1470,7 @@ impl ::protobuf::Message for ParquetReaderProto {
             v.write_to_with_cached_sizes(os)?;
         };
         if let Some(ref v) = self.schema.as_ref() {
-            os.write_tag(3, ::protobuf::wire_format::WireTypeLengthDelimited)?;
-            os.write_raw_varint32(v.get_cached_size())?;
-            v.write_to_with_cached_sizes(os)?;
+            os.write_bytes(3, &v)?;
         }
         os.write_unknown_fields(self.get_unknown_fields())?;
         ::std::result::Result::Ok(())
@@ -1445,7 +1524,7 @@ impl ::protobuf::Message for ParquetReaderProto {
                     |m: &ParquetReaderProto| { &m.column_desc },
                     |m: &mut ParquetReaderProto| { &mut m.column_desc },
                 ));
-                fields.push(::protobuf::reflect::accessor::make_singular_ptr_field_accessor::<_, ::protobuf::types::ProtobufTypeMessage<super::types::SchemaProto>>(
+                fields.push(::protobuf::reflect::accessor::make_singular_field_accessor::<_, ::protobuf::types::ProtobufTypeBytes>(
                     "schema",
                     |m: &ParquetReaderProto| { &m.schema },
                     |m: &mut ParquetReaderProto| { &mut m.schema },
@@ -1492,26 +1571,27 @@ impl ::protobuf::reflect::ProtobufValue for ParquetReaderProto {
 }
 
 static file_descriptor_proto_data: &'static [u8] = b"\
-    \n\rparquet.proto\x1a\x0btypes.proto\"\xec\x01\n\x0cParquetProto\"}\n\
-    \x0cPhysicalType\x12\x0b\n\x07BOOLEAN\x10\0\x12\t\n\x05INT32\x10\x01\x12\
-    \t\n\x05INT64\x10\x02\x12\t\n\x05INT96\x10\x03\x12\t\n\x05FLOAT\x10\x04\
-    \x12\n\n\x06DOUBLE\x10\x05\x12\x0e\n\nBYTE_ARRAY\x10\x06\x12\x18\n\x14FI\
-    XED_LEN_BYTE_ARRAY\x10\x07\"]\n\x0bCompression\x12\x10\n\x0cUNCOMPRESSED\
-    \x10\0\x12\n\n\x06SNAPPY\x10\x01\x12\x08\n\x04GZIP\x10\x02\x12\x07\n\x03\
-    LZO\x10\x03\x12\n\n\x06BROTLI\x10\x04\x12\x07\n\x03LZ4\x10\x05\x12\x08\n\
-    \x04ZSTD\x10\x06\"/\n\x0cSegmentProto\x12\x0f\n\x07address\x18\x01\x20\
-    \x02(\x03\x12\x0e\n\x06length\x18\x02\x20\x02(\x05\"H\n\x10ColumnChunkPr\
-    oto\x12\x13\n\x0bcolumn_name\x18\x01\x20\x02(\t\x12\x1f\n\x08segments\
-    \x18\x05\x20\x03(\x0b2\r.SegmentProto\"3\n\rRowGroupProto\x12\"\n\x07col\
-    umns\x18\x01\x20\x03(\x0b2\x11.ColumnChunkProto\"\xa0\x01\n\x0fColumnDes\
-    cProto\x12\x13\n\x0bcolumn_name\x18\x01\x20\x02(\t\x12\x15\n\rmax_def_le\
-    vel\x18\x02\x20\x02(\x05\x121\n\rphysical_type\x18\x03\x20\x02(\x0e2\x1a\
-    .ParquetProto.PhysicalType\x12.\n\x0bcompression\x18\x04\x20\x02(\x0e2\
-    \x19.ParquetProto.Compression\"m\n\x12ParquetReaderProto\x12\x12\n\nbatc\
-    h_size\x18\x01\x20\x02(\x05\x12%\n\x0bcolumn_desc\x18\x02\x20\x03(\x0b2\
-    \x10.ColumnDescProto\x12\x1c\n\x06schema\x18\x03\x20\x02(\x0b2\x0c.Schem\
-    aProtoBI\n9com.ebay.hadoop.blitzwing.generated.arrow.adaptor.parquetB\
-    \x0cParquetProto\
+    \n\rparquet.proto\"\xec\x01\n\x0cParquetProto\"}\n\x0cPhysicalType\x12\
+    \x0b\n\x07BOOLEAN\x10\0\x12\t\n\x05INT32\x10\x01\x12\t\n\x05INT64\x10\
+    \x02\x12\t\n\x05INT96\x10\x03\x12\t\n\x05FLOAT\x10\x04\x12\n\n\x06DOUBLE\
+    \x10\x05\x12\x0e\n\nBYTE_ARRAY\x10\x06\x12\x18\n\x14FIXED_LEN_BYTE_ARRAY\
+    \x10\x07\"]\n\x0bCompression\x12\x10\n\x0cUNCOMPRESSED\x10\0\x12\n\n\x06\
+    SNAPPY\x10\x01\x12\x08\n\x04GZIP\x10\x02\x12\x07\n\x03LZO\x10\x03\x12\n\
+    \n\x06BROTLI\x10\x04\x12\x07\n\x03LZ4\x10\x05\x12\x08\n\x04ZSTD\x10\x06\
+    \"/\n\x0cSegmentProto\x12\x0f\n\x07address\x18\x01\x20\x02(\x03\x12\x0e\
+    \n\x06length\x18\x02\x20\x02(\x05\"\\\n\x10ColumnChunkProto\x12\x13\n\
+    \x0bcolumn_name\x18\x01\x20\x02(\t\x12\x12\n\nnum_values\x18\x02\x20\x02\
+    (\x03\x12\x1f\n\x08segments\x18\x03\x20\x03(\x0b2\r.SegmentProto\"3\n\rR\
+    owGroupProto\x12\"\n\x07columns\x18\x01\x20\x03(\x0b2\x11.ColumnChunkPro\
+    to\"\xb5\x01\n\x0fColumnDescProto\x12\x13\n\x0bcolumn_name\x18\x01\x20\
+    \x02(\t\x12\x15\n\rmax_def_level\x18\x02\x20\x02(\x05\x12\x13\n\x0btype_\
+    length\x18\x03\x20\x02(\x05\x121\n\rphysical_type\x18\x04\x20\x02(\x0e2\
+    \x1a.ParquetProto.PhysicalType\x12.\n\x0bcompression\x18\x05\x20\x02(\
+    \x0e2\x19.ParquetProto.Compression\"_\n\x12ParquetReaderProto\x12\x12\n\
+    \nbatch_size\x18\x01\x20\x02(\x05\x12%\n\x0bcolumn_desc\x18\x02\x20\x03(\
+    \x0b2\x10.ColumnDescProto\x12\x0e\n\x06schema\x18\x03\x20\x02(\x0cBI\n9c\
+    om.ebay.hadoop.blitzwing.generated.arrow.adaptor.parquetB\x0cParquetProt\
+    o\
 ";
 
 static mut file_descriptor_proto_lazy: ::protobuf::lazy::Lazy<::protobuf::descriptor::FileDescriptorProto> = ::protobuf::lazy::Lazy {
