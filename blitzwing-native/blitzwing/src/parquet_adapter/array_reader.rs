@@ -39,7 +39,7 @@ use parquet::data_type::{
     DoubleType as ParquetDoubleType,
     ByteArrayType as ParquetByteArrayType
 };
-use crate::util::concat_reader::PageReaderRef;
+use crate::util::concat_reader::PageReaderIteratorRef;
 
 pub trait ArrayReader {
     fn data_type(&self) -> &DataType;
@@ -72,7 +72,7 @@ where
         batch_size: usize,
         arrow_conversion_needed: bool,
         column_desc: ColumnDescProtoPtr,
-        page_reader: PageReaderRef,
+        page_readers: PageReaderIteratorRef
     ) -> Result<Self> {
         let parquet_data_buffer = MutableBufferOps::new(MutableBuffer::new(batch_size * P::get_type_size()));
         let arrow_data_buffer = if arrow_conversion_needed {
@@ -80,7 +80,7 @@ where
         } else {
             None
         };
-        let record_reader = RecordReader::<P, MutableBufferOps>::new(batch_size, column_desc, parquet_data_buffer, page_reader)?;
+        let record_reader = RecordReader::<P, MutableBufferOps>::new(batch_size, column_desc, parquet_data_buffer, page_readers)?;
 
         Ok(Self {
             arrow_data_buffer,
@@ -154,13 +154,13 @@ impl<A, P> VarLenArrayReader<A, P>
     pub(crate) fn new(batch_size: usize,
                column_desc: ColumnDescProtoPtr,
                data_type: DataType,
-               page_reader: PageReaderRef) -> Result<Self> {
+               page_readers: PageReaderIteratorRef) -> Result<Self> {
         let mut parquet_data_buffer = Vec::with_capacity(batch_size);
         parquet_data_buffer.resize_with(batch_size, P::T::default);
         
         let arrow_data_buffer = MutableBuffer::new(batch_size);
         let arrow_offset_buffer = Int32BufferBuilder::new(batch_size + 1);
-        let record_reader = RecordReader::<P, Vec<P::T>>::new(batch_size, column_desc, parquet_data_buffer, page_reader)?;
+        let record_reader = RecordReader::<P, Vec<P::T>>::new(batch_size, column_desc, parquet_data_buffer, page_readers)?;
         
         Ok(Self {
             arrow_data_buffer,

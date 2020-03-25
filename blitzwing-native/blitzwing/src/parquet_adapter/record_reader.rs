@@ -14,7 +14,7 @@ use crate::error::Result;
 use arrow::array::{BooleanBufferBuilder, BufferBuilderTrait};
 use failure::ResultExt;
 use crate::types::ColumnDescProtoPtr;
-use crate::util::concat_reader::PageReaderRef;
+use crate::util::concat_reader::{PageReaderIteratorRef, PageReaderRef};
 
 pub struct RecordReader<T, B>
 where
@@ -30,7 +30,8 @@ where
     null_bitmap: BooleanBufferBuilder,
     def_levels: Vec<i16>,
 
-    page_reader: PageReaderRef,
+    page_readers: PageReaderIteratorRef,
+    cur_page_reader: Option<PageReaderRef>,
 
     def_level_decoder: Option<LevelDecoder>,
     current_encoding: Option<Encoding>,
@@ -52,7 +53,7 @@ where
     T: ParquetType,
     B: AsMut<[T::T]>,
 {
-    pub(crate) fn new(batch_size: usize, column_desc: ColumnDescProtoPtr, buffer: B, page_reader: PageReaderRef) -> Result<Self> {
+    pub(crate) fn new(batch_size: usize, column_desc: ColumnDescProtoPtr, buffer: B, page_readers: PageReaderIteratorRef) -> Result<Self> {
         let null_bitmap = BooleanBufferBuilder::new(batch_size);
         let mut def_levels = Vec::with_capacity(batch_size);
         def_levels.resize_with(batch_size, || 0);
@@ -65,7 +66,8 @@ where
             parquet_data_buffer: buffer,
             null_bitmap,
             def_levels,
-            page_reader,
+            page_readers,
+            cur_page_reader: None,
             def_level_decoder: None,
             current_encoding: None,
             num_buffered_values: 0,
@@ -75,11 +77,11 @@ where
         })
     }
 
-    pub(crate) fn set_data(&mut self, page_reader: PageReaderRef) {
-        self.page_reader = page_reader;
-        self.num_buffered_values = 0;
-        self.num_decoded_values = 0;
-    }
+    // pub(crate) fn set_data(&mut self, page_reader: PageReaderRef) {
+    //     self.page_reader = page_reader;
+    //     self.num_buffered_values = 0;
+    //     self.num_decoded_values = 0;
+    // }
 
     pub(crate) fn reset_batch(&mut self) {
         self.num_values = 0;
@@ -174,10 +176,19 @@ where
     /// Returns false if there's no page left.
     fn read_new_page(&mut self) -> Result<bool> {
         loop {
-            match self.page_reader.get_next_page().context(ParquetError)? {
+            if self.cur_page_reader.is_none() {
+                self.cur_page_reader = self.page_readers.try_next()?;
+                if self.cur_page_reader.is_none() {
+                    return Ok(false);
+                }
+            }
+
+            let cur_page_reader = self.cur_page_reader.as_mut().expect("Current page reader should have been initialized!");
+
+            match cur_page_reader.get_next_page().context(ParquetError)? {
                 // No more page to read
                 None => {
-                    return Ok(false)
+                    self.cur_page_reader = None
                 },
                 Some(current_page) => {
                     match current_page {

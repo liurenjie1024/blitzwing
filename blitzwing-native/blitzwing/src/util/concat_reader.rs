@@ -12,6 +12,8 @@ use failure::ResultExt;
 use arrow::buffer::Buffer;
 use parquet::column::page::PageReader;
 use std::mem::transmute;
+use crate::error::BlitzwingError;
+use crate::util::TryIterator;
 
 pub(crate) struct ConcatReader<T: Read> {
   readers: Vec<T>,
@@ -53,6 +55,7 @@ impl<T: Read> ConcatReader<T> {
 
 
 pub(crate) type PageReaderRef = Box<dyn PageReader>;
+pub(crate) type PageReaderIteratorRef = Box<dyn TryIterator<Error = BlitzwingError, Item = PageReaderRef>>;
 
 pub(crate) fn create_page_reader(column_desc: &ColumnDescProto, column_chunk: &ColumnChunkProto) -> Result<impl PageReader> {
   let reader = column_chunk_to_read(column_chunk)?;
