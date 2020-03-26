@@ -363,13 +363,16 @@ pub(crate) mod tests {
   fn test_read_block_multi_parts() {
     let (mut block_reader, block_content) = prepare_block_reader(4);
 
-    let mut buf = [0u8;1];
+    let mut buf = [0u8; 1];
 
     for idx in 0..block_content.len() {
       println!("Current idx: {}", idx);
-      block_reader.read_exact(&mut buf).expect("Read one by one should be ok!"); 
+      block_reader.read_exact(&mut buf).expect("Read one by one should be ok!");
       assert_eq!(block_content[idx], buf[0]);
-      assert_eq!(block_content.len()-idx-1, block_reader.available().expect("Get avaiable should succeed"));
+      assert_eq!(
+        block_content.len() - idx - 1,
+        block_reader.available().expect("Get avaiable should succeed")
+      );
     }
 
     assert_eq!(0, block_reader.read(&mut buf).expect("Read pass block should not fail"));

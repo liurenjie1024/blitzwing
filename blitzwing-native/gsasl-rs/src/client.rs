@@ -1,30 +1,18 @@
-use crate::bindings::Gsasl_property_GSASL_QOP;
-use crate::bindings::Gsasl_property_GSASL_HOSTNAME;
-use crate::bindings::Gsasl_property_GSASL_SERVICE;
-use crate::bindings::gsasl_property_set;
-use crate::bindings::Gsasl_property_GSASL_AUTHID;
-use crate::error::SaslErrorKind::NotValidCString;
-use crate::bindings::gsasl_finish;
-use std::ffi::c_void;
-use crate::bindings::gsasl_free;
-use crate::bindings::Gsasl_rc_GSASL_NEEDS_MORE;
-use crate::bindings::gsasl_step;
-use crate::utils::to_raw_mut;
-use crate::bindings::gsasl_client_start;
-use std::ffi::CStr;
-use std::ffi::CString;
-use crate::utils::is_ok;
-use crate::bindings::Gsasl_rc;
-use crate::utils::from_raw_mut;
-use crate::bindings::Gsasl_rc_GSASL_OK;
-use std::ptr::null_mut;
-use crate::bindings::gsasl_init;
-use crate::bindings::Gsasl;
-use crate::bindings::Gsasl_session;
-use crate::error::Result;
-use crate::error::GsaslErrorInfo;
-use crate::error::SaslError;
+use crate::{
+  bindings::{
+    gsasl_client_start, gsasl_finish, gsasl_free, gsasl_init, gsasl_property_set, gsasl_step,
+    Gsasl, Gsasl_property_GSASL_AUTHID, Gsasl_property_GSASL_HOSTNAME, Gsasl_property_GSASL_QOP,
+    Gsasl_property_GSASL_SERVICE, Gsasl_rc, Gsasl_rc_GSASL_NEEDS_MORE, Gsasl_rc_GSASL_OK,
+    Gsasl_session,
+  },
+  error::{GsaslErrorInfo, Result, SaslError, SaslErrorKind::NotValidCString},
+  utils::{from_raw_mut, is_ok, to_raw_mut},
+};
 use failure::ResultExt;
+use std::{
+  ffi::{c_void, CStr, CString},
+  ptr::null_mut,
+};
 
 /// We use `usize` instead of `NonNull`, ptr types here becase we want to skip sync and send check of compiler
 type GsaslPtr = usize;
@@ -46,9 +34,9 @@ lazy_static! {
 
     from_raw_mut(ctx)
   };
-
   static ref C_MA_GSS_API: CString = {
-    CString::new(MECHANISM_NAME_GSS_API).expect(format!("Failed to c style mechanism name for {}", MECHANISM_NAME_GSS_API).as_str())
+    CString::new(MECHANISM_NAME_GSS_API)
+      .expect(format!("Failed to c style mechanism name for {}", MECHANISM_NAME_GSS_API).as_str())
   };
 }
 
@@ -56,7 +44,7 @@ lazy_static! {
 pub struct GssApiInfo {
   client_principal: String,
   service: String,
-  server_host: String
+  server_host: String,
 }
 
 impl GssApiInfo {
@@ -66,8 +54,8 @@ impl GssApiInfo {
 
       let c_client_principal = CString::new(self.client_principal.as_bytes())
         .context(NotValidCString(self.client_principal.clone()))?;
-      let c_service = CString::new(self.service.as_bytes())
-        .context(NotValidCString(self.service.clone()))?;
+      let c_service =
+        CString::new(self.service.as_bytes()).context(NotValidCString(self.service.clone()))?;
       let c_server_host = CString::new(self.server_host.as_bytes())
         .context(NotValidCString(self.server_host.clone()))?;
 
@@ -81,25 +69,25 @@ impl GssApiInfo {
 }
 
 enum Kind {
-  GssApi(GssApiInfo)
+  GssApi(GssApiInfo),
 }
 
 impl Kind {
   fn mechanism_name(&self) -> &str {
     match self {
-      Kind::GssApi(_) => MECHANISM_NAME_GSS_API
+      Kind::GssApi(_) => MECHANISM_NAME_GSS_API,
     }
   }
 
   fn mechanism_name_c(&self) -> &CStr {
     match self {
-      Kind::GssApi(_) => C_MA_GSS_API.as_c_str()
+      Kind::GssApi(_) => C_MA_GSS_API.as_c_str(),
     }
   }
 
   fn client_sends_data_first(&self) -> bool {
     match self {
-      Kind::GssApi(_) => true
+      Kind::GssApi(_) => true,
     }
   }
 
@@ -112,7 +100,7 @@ impl Kind {
     }
 
     match self {
-      Kind::GssApi(info) => info.init_gsasl_properties(gsasl_session)
+      Kind::GssApi(info) => info.init_gsasl_properties(gsasl_session),
     }
   }
 }
@@ -125,7 +113,7 @@ pub struct SaslClient {
 
 fn new_session(kind: &Kind) -> Result<GsaslSessionPtr> {
   unsafe {
-    let ctx_ptr = to_raw_mut::<Gsasl>(*CLIENT_CONTEXT); 
+    let ctx_ptr = to_raw_mut::<Gsasl>(*CLIENT_CONTEXT);
     let mut session_ptr = null_mut();
     let rc = gsasl_client_start(ctx_ptr, kind.mechanism_name_c().as_ptr(), &mut session_ptr);
 
@@ -144,11 +132,7 @@ fn new_sasl_client(kind: Kind) -> Result<SaslClient> {
 
   kind.init_gsasl_properties(session)?;
 
-  Ok(SaslClient {
-    gsasl_session: session,
-    inner: kind,
-    is_complete: false,
-  })
+  Ok(SaslClient { gsasl_session: session, inner: kind, is_complete: false })
 }
 
 impl SaslClient {
@@ -167,7 +151,13 @@ impl SaslClient {
   pub fn evaluate(&mut self, input: &[u8]) -> Result<Vec<u8>> {
     unsafe {
       let (mut output_ptr, mut output_len) = (null_mut(), 0u64);
-      let rc = gsasl_step(self.gsasl_session_ptr_mut(), input.as_ptr() as *const i8, input.len() as u64, &mut output_ptr, &mut output_len);
+      let rc = gsasl_step(
+        self.gsasl_session_ptr_mut(),
+        input.as_ptr() as *const i8,
+        input.len() as u64,
+        &mut output_ptr,
+        &mut output_len,
+      );
 
       let gsasl_rc = rc as Gsasl_rc;
 
@@ -198,8 +188,6 @@ impl SaslClient {
 
 impl Drop for SaslClient {
   fn drop(&mut self) {
-    unsafe {
-      gsasl_finish(self.gsasl_session_ptr_mut())
-    }
+    unsafe { gsasl_finish(self.gsasl_session_ptr_mut()) }
   }
 }

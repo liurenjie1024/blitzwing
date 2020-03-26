@@ -4,7 +4,7 @@ use crate::{
     Result,
   },
   types::ColumnDescProtoPtr,
-  util::concat_reader::{PageReaderIteratorRef, PageReaderRef},
+  util::reader::{PageReaderIteratorRef, PageReaderRef},
 };
 use arrow::array::{BooleanBufferBuilder, BufferBuilderTrait};
 use failure::ResultExt;

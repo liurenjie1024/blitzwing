@@ -6,11 +6,12 @@ extern crate log;
 extern crate failure;
 
 use failure::{Fail, ResultExt};
-use hdfs_rs::{config::Configuration, error::Result, fs::make_file_system};
-use std::sync::Arc;
-use std::fs::File;
-use std::io::copy;
-use hdfs_rs::error::HdfsLibErrorKind::IoError;
+use hdfs_rs::{
+  config::Configuration,
+  error::{HdfsLibErrorKind::IoError, Result},
+  fs::make_file_system,
+};
+use std::{fs::File, io::copy, sync::Arc};
 
 fn main() {
   let path = "/Users/renliu/Workspace/blitzwing/blitzwing-native/hdfs-tools/log4rs/hdfs.yaml";
@@ -44,13 +45,13 @@ fn list_file_status() -> Result<()> {
 }
 
 fn read_file_content() -> Result<()> {
-     let path = "hdfs://hadoop-docker-build-3648195.lvs02.dev.ebayc3.com:9000";
-     let config = Arc::new(Configuration::new());
-     let fs = make_file_system(&path, config)?;
-  
-     let file_path = "/user/root/input/log4j.properties";
-     let mut input = fs.open(file_path)?;
-     let mut output = File::create("/tmp/out").context(IoError)?;
-     copy(&mut input, &mut output).context(IoError)?;
-     Ok(())
+  let path = "hdfs://hadoop-docker-build-3648195.lvs02.dev.ebayc3.com:9000";
+  let config = Arc::new(Configuration::new());
+  let fs = make_file_system(&path, config)?;
+
+  let file_path = "/user/root/input/log4j.properties";
+  let mut input = fs.open(file_path)?;
+  let mut output = File::create("/tmp/out").context(IoError)?;
+  copy(&mut input, &mut output).context(IoError)?;
+  Ok(())
 }

@@ -1,21 +1,8 @@
-use crate::rpc::sasl::SaslRpcClient;
-use crate::rpc::user::SubjectRef;
-use crate::rpc::message::receive_rpc_response;
-use crate::rpc::message::RpcResponse;
-use crate::rpc::message::send_rpc_request;
-use crate::rpc::constants::RPC_INVALID_RETRY_COUNT;
-use crate::rpc::constants::RPC_CURRENT_VERSION;
-use crate::rpc::constants::RPC_CONNECTION_CONTEXT_CALL_ID;
-use crate::rpc::constants::RPC_HEADER;
-use crate::rpc::constants::RPC_SERVICE_CLASS_DEFAULT;
-use crate::rpc::auth::AuthMethod::Simple;
-use crate::rpc::message::make_rpc_request_header;
 use crate::{
   error::{
     HdfsLibError, HdfsLibErrorKind,
     HdfsLibErrorKind::{
-      IoError, LockError, SocketAddressParseError, SyncError, SystemError,
-      TaskJoinError,
+      IoError, LockError, SocketAddressParseError, SyncError, SystemError, TaskJoinError,
     },
     Result,
   },
@@ -23,21 +10,25 @@ use crate::{
     IpcConnectionContext::{IpcConnectionContextProto, UserInformationProto},
     RpcHeader::{RpcKindProto, RpcRequestHeaderProto, RpcRequestHeaderProto_OperationProto},
   },
-  rpc::auth::{AuthMethod, AuthProtocol},
+  rpc::{
+    auth::{AuthMethod, AuthMethod::Simple, AuthProtocol},
+    constants::{
+      RPC_CONNECTION_CONTEXT_CALL_ID, RPC_CURRENT_VERSION, RPC_HEADER, RPC_INVALID_RETRY_COUNT,
+      RPC_SERVICE_CLASS_DEFAULT,
+    },
+    message::{make_rpc_request_header, receive_rpc_response, send_rpc_request, RpcResponse},
+    sasl::SaslRpcClient,
+    user::SubjectRef,
+  },
 };
 
 use crate::{
   config::ConfigRef,
-  hadoop_proto::{
-    ProtobufRpcEngine::RequestHeaderProto,
-  },
+  hadoop_proto::ProtobufRpcEngine::RequestHeaderProto,
   rpc::message::{Messages, RpcMessageSerialize},
   rt::get_runtime,
 };
-use bytes::{
-  buf::ext::BufMutExt,
-  BufMut, Bytes, BytesMut,
-};
+use bytes::{buf::ext::BufMutExt, BufMut, Bytes, BytesMut};
 use failure::ResultExt;
 use protobuf::Message;
 use std::{
@@ -62,11 +53,9 @@ use tokio::{
 
 use crate::rpc::sasl::SaslProtocol;
 
-
 static CALL_ID: AtomicI32 = AtomicI32::new(1024);
 
 type ConnectionId = String;
-
 
 struct RpcCall {
   id: i32,
@@ -165,7 +154,12 @@ impl ConnectionContext {
 }
 
 impl<'a> BasicRpcClientBuilder<'a> {
-  pub fn new(remote_address_str: &'a str, client_id: Bytes, config: ConfigRef, user: SubjectRef) -> Self {
+  pub fn new(
+    remote_address_str: &'a str,
+    client_id: Bytes,
+    config: ConfigRef,
+    user: SubjectRef,
+  ) -> Self {
     Self { remote_address_str, client_id, config, user }
   }
 
@@ -180,11 +174,8 @@ impl<'a> BasicRpcClientBuilder<'a> {
 
     let config = Arc::new(BasicRpcClientConfig { _inner: self.config });
 
-    let auth_protocol = if self.user.is_security_enabled() {
-      AuthProtocol::Sasl
-    } else {
-      AuthProtocol::None
-    };
+    let auth_protocol =
+      if self.user.is_security_enabled() { AuthProtocol::Sasl } else { AuthProtocol::None };
 
     let context = Arc::new(BasicRpcClientContext {
       endpoint,
@@ -293,9 +284,10 @@ impl Connection {
     get_runtime().spawn(async move { event_sender.send(event).await });
 
     let timeout = Duration::from_secs(10);
-    receiver.recv_timeout(timeout).context(HdfsLibErrorKind::TimeOutError(timeout))?.and_then(
-      |resp| { resp.get_message() },
-    )
+    receiver
+      .recv_timeout(timeout)
+      .context(HdfsLibErrorKind::TimeOutError(timeout))?
+      .and_then(|resp| resp.get_message())
   }
 }
 
@@ -489,8 +481,17 @@ impl ConnectionLoop {
 
     if self.context.rpc_client_context.auth_protocol == AuthProtocol::Sasl {
       debug!("Begin to do sasl authentication for {:?}", self);
-      let sasl_rpc_client = SaslProtocol::new(self.context.protocol.clone(), self.context.rpc_client_context.user.clone()).sasl_connect(&mut tcp_stream).await?;
-      debug!("Sasl authentication finished for {:?}, auth method is {:?}", self, sasl_rpc_client.auth_method());
+      let sasl_rpc_client = SaslProtocol::new(
+        self.context.protocol.clone(),
+        self.context.rpc_client_context.user.clone(),
+      )
+      .sasl_connect(&mut tcp_stream)
+      .await?;
+      debug!(
+        "Sasl authentication finished for {:?}, auth method is {:?}",
+        self,
+        sasl_rpc_client.auth_method()
+      );
       self.sasl_rpc_client = Some(sasl_rpc_client);
     }
 

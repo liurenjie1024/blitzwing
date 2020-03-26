@@ -1,10 +1,10 @@
-use std::ffi::OsString;
 use crate::{
   hadoop_proto::RpcHeader::{RpcResponseHeaderProto, RpcResponseHeaderProto_RpcErrorCodeProto},
   hdfs::block::ExtendedBlock,
 };
 use failure::{Backtrace, Context, Fail};
 use std::{
+  ffi::OsString,
   fmt::{Display, Formatter},
   time::Duration,
 };

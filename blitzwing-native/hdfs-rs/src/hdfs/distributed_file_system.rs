@@ -1,4 +1,3 @@
-use crate::rpc::user::{SubjectRef, Subject};
 use crate::{
   config::ConfigRef,
   error::{HdfsLibErrorKind::InvalidArgumentError, Result},
@@ -13,7 +12,10 @@ use crate::{
     protocol::client_protocol::{ClientProtocolRef, RpcClientProtocol},
     transfer::{block_io::RemoteBlockReaderFactory, dfs_input_stream::DFSInputStream},
   },
-  rpc::rpc_client::RpcClientBuilder,
+  rpc::{
+    rpc_client::RpcClientBuilder,
+    user::{Subject, SubjectRef},
+  },
 };
 use std::{convert::TryFrom, sync::Arc};
 
@@ -50,7 +52,7 @@ pub struct DFSBuilder<'a> {
 
 impl<'a> DFSBuilder<'a> {
   pub fn new(path: &'a str, config: ConfigRef) -> Self {
-    Self { path, config, subject: None, }
+    Self { path, config, subject: None }
   }
 
   pub fn with_user(mut self, user: SubjectRef) -> Self {
@@ -66,7 +68,7 @@ impl<'a> DFSBuilder<'a> {
       );
     }
 
-    let user= if self.subject.is_none() {
+    let user = if self.subject.is_none() {
       Arc::new(Subject::from_os_user()?)
     } else {
       self.subject.unwrap()
@@ -80,7 +82,6 @@ impl<'a> DFSBuilder<'a> {
 
     let namenode = Arc::new(RpcClientProtocol::new(base_uri.clone(), rpc_client_ref.clone()));
     let hdfs_config = HdfsClientConfig::new(self.config.clone())?;
-
 
     Ok(Arc::new(DistributedFileSystem { _base_uri: base_uri, namenode, config: hdfs_config, user }))
   }

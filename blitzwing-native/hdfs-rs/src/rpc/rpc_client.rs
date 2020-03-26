@@ -1,9 +1,11 @@
-use crate::rpc::user::SubjectRef;
 use crate::{
   config::ConfigRef,
   error::{HdfsLibErrorKind::LockError, Result},
   hadoop_proto::ProtobufRpcEngine::RequestHeaderProto,
-  rpc::basic_rpc_client::{BasicRpcClient, BasicRpcClientBuilder},
+  rpc::{
+    basic_rpc_client::{BasicRpcClient, BasicRpcClientBuilder},
+    user::SubjectRef,
+  },
 };
 use bytes::Bytes;
 use protobuf::Message;
@@ -68,8 +70,13 @@ impl<'a> RpcClientBuilder<'a> {
     let client_uuid = Uuid::new_v4();
     let client_id = Bytes::copy_from_slice(client_uuid.as_bytes() as &[u8]);
 
-    let inner =
-      BasicRpcClientBuilder::new(self.authority, client_id.clone(), self.config.clone(), self.user.clone()).build()?;
+    let inner = BasicRpcClientBuilder::new(
+      self.authority,
+      client_id.clone(),
+      self.config.clone(),
+      self.user.clone(),
+    )
+    .build()?;
 
     Ok(Arc::new(RpcClient { inner }))
   }

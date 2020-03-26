@@ -1,9 +1,9 @@
-use crate::rpc::user::SubjectRef;
 use crate::{
   config::ConfigRef,
   error::Result,
   fs::{file_status::FileStatus, input_stream::FsInputStreamRef},
   hdfs::distributed_file_system::DFSBuilder,
+  rpc::user::SubjectRef,
 };
 use std::sync::Arc;
 
@@ -19,8 +19,10 @@ pub fn make_file_system(fs_path: &str, config: ConfigRef) -> Result<FileSystemRe
   DFSBuilder::new(fs_path, config).build()
 }
 
-pub fn make_file_system_with_user(fs_path: &str, config: ConfigRef, user: SubjectRef) -> Result<FileSystemRef> {
-  DFSBuilder::new(fs_path, config)
-    .with_user(user)
-    .build()
+pub fn make_file_system_with_user(
+  fs_path: &str,
+  config: ConfigRef,
+  user: SubjectRef,
+) -> Result<FileSystemRef> {
+  DFSBuilder::new(fs_path, config).with_user(user).build()
 }

@@ -1,14 +1,13 @@
-
-use crate::error::SaslErrorKind::GsaslError;
-use crate::bindings::gsasl_strerror;
-use crate::bindings::gsasl_strerror_name;
+use crate::{
+  bindings::{gsasl_strerror, gsasl_strerror_name},
+  error::SaslErrorKind::GsaslError,
+};
 use core::fmt::Debug;
-use failure::Fail;
-use failure::Backtrace;
-use std::fmt::Formatter;
-use std::fmt::Display;
-use failure::Context;
-use std::ffi::CStr;
+use failure::{Backtrace, Context, Fail};
+use std::{
+  ffi::CStr,
+  fmt::{Display, Formatter},
+};
 
 #[derive(Debug)]
 pub struct SaslError {
@@ -27,19 +26,22 @@ pub enum SaslErrorKind {
 
 #[derive(Clone, Eq, PartialEq, new)]
 pub struct GsaslErrorInfo {
-  rc: i32
+  rc: i32,
 }
 
 impl Debug for GsaslErrorInfo {
-  
-fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
-  let (error_name, error_reaseon) = unsafe {
-    let error_name = CStr::from_ptr(gsasl_strerror_name(self.rc));
-    let error_desc = CStr::from_ptr(gsasl_strerror(self.rc));
-    (error_name, error_desc)
-  };
-  write!(f, "Gsasl error [{}], error name: [{:?}], error reason: [{:?}]", self.rc, error_name, error_reaseon)
-}
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::result::Result<(), std::fmt::Error> {
+    let (error_name, error_reaseon) = unsafe {
+      let error_name = CStr::from_ptr(gsasl_strerror_name(self.rc));
+      let error_desc = CStr::from_ptr(gsasl_strerror(self.rc));
+      (error_name, error_desc)
+    };
+    write!(
+      f,
+      "Gsasl error [{}], error name: [{:?}], error reason: [{:?}]",
+      self.rc, error_name, error_reaseon
+    )
+  }
 }
 
 impl SaslError {

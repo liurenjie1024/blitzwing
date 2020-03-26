@@ -1,13 +1,15 @@
-use crate::rpc::auth::AuthMethod;
-use crate::error::Result;
-use std::sync::Arc;
+use crate::{
+  error::{HdfsLibError, HdfsLibErrorKind::FromOsStringError, Result},
+  rpc::auth::AuthMethod,
+};
 use regex::Regex;
+use std::sync::Arc;
 use users::get_current_username;
-use crate::error::HdfsLibError;
-use crate::error::HdfsLibErrorKind::FromOsStringError;
 
 lazy_static! {
-  static ref KERBEROS_USER_NAME: Regex = Regex::new(r"(?P<short>\w+)(/(?P<host>[\w\-\.]+))?@(?P<domain>[\w\.]+)").expect("Failed to parse regular expression pattern for kerberos username!");
+  static ref KERBEROS_USER_NAME: Regex =
+    Regex::new(r"(?P<short>\w+)(/(?P<host>[\w\-\.]+))?@(?P<domain>[\w\.]+)")
+      .expect("Failed to parse regular expression pattern for kerberos username!");
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Getters)]
@@ -15,7 +17,7 @@ lazy_static! {
 struct KerberosName {
   user: String,
   host: Option<String>,
-  domain: String
+  domain: String,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -34,12 +36,11 @@ pub(crate) struct User {
   kind: UserKind,
 }
 
-pub(crate) struct Credentials {
-}
+pub(crate) struct Credentials {}
 
 pub struct Subject {
   user: User,
-  credential: Credentials
+  credential: Credentials,
 }
 
 pub type SubjectRef = Arc<Subject>;
@@ -47,19 +48,12 @@ pub type SubjectRef = Arc<Subject>;
 /// Public interfaces
 impl Subject {
   pub fn from_os_user() -> Result<Self> {
-    Ok(Subject {
-      user: User::from_os_user()?,
-      credential: Credentials {}
-    })
+    Ok(Subject { user: User::from_os_user()?, credential: Credentials {} })
   }
 
   pub fn from_ticket_cache<S: AsRef<str>>(username: S) -> Result<Self> {
-    Ok(Subject {
-      user: User::from_kerberos_name(username)?,
-      credential: Credentials {}
-    })
+    Ok(Subject { user: User::from_kerberos_name(username)?, credential: Credentials {} })
   }
-
 
   pub fn username(&self) -> &str {
     self.user.shortname.as_str()
@@ -68,7 +62,6 @@ impl Subject {
   pub fn fullname(&self) -> &str {
     self.user.fullname.as_str()
   }
-
 }
 
 /// Interfaces available only in crate
@@ -83,32 +76,31 @@ impl Subject {
   pub(crate) fn is_security_enabled(&self) -> bool {
     match self.user.kind {
       UserKind::Simple => false,
-      _ => true
+      _ => true,
     }
   }
 }
-
-
 
 impl User {
   fn from_kerberos_name<S: AsRef<str>>(name: S) -> Result<Self> {
     let name_str = name.as_ref();
     let kerberos_name = KerberosName::from_str(name_str)?;
-    Ok (Self {
+    Ok(Self {
       shortname: kerberos_name.user().to_string(),
       fullname: kerberos_name.fullname(),
-      kind: UserKind::Kerberos
+      kind: UserKind::Kerberos,
     })
   }
 
   fn from_os_user() -> Result<Self> {
     if let Some(username) = get_current_username() {
-      username.into_string()
+      username
+        .into_string()
         .map_err(|os_string| HdfsLibError::from(FromOsStringError(os_string)))
         .map(|name| User {
           shortname: name.clone(),
           fullname: name.clone(),
-          kind: UserKind::Simple
+          kind: UserKind::Simple,
         })
     } else {
       invalid_state!("{}", "Current user does not exist!");
@@ -125,16 +117,12 @@ impl KerberosName {
         invalid_argument!("{} is not a valie kerberos name!", source);
       }
 
-      let shortname = cap.name("short").expect("Short name in kerberos not found!").as_str()
-      .to_string();
+      let shortname =
+        cap.name("short").expect("Short name in kerberos not found!").as_str().to_string();
       let host = cap.name("host").map(|m| m.as_str().to_string());
       let domain = cap.name("domain").expect("Domain in kerberos not found!").as_str().to_string();
 
-      Ok(Self {
-        user: shortname,
-        host,
-        domain
-      })
+      Ok(Self { user: shortname, host, domain })
     } else {
       invalid_argument!("{} is not a valid kerberos name!", source);
     }
@@ -143,7 +131,7 @@ impl KerberosName {
   fn fullname(&self) -> String {
     match self.host {
       Some(ref h) => format!("{}/{}@{}", self.user, h, self.domain),
-      None => format!("{}@{}", self.user, self.domain)
+      None => format!("{}@{}", self.user, self.domain),
     }
   }
 }
@@ -156,20 +144,19 @@ mod tests {
   fn test_create_kerberos_user() {
     {
       let source = "a_b@PROD.COM";
-      let expected_kerberos_name = KerberosName {
-        user: "a_b".to_string(),
-        host: None,
-        domain: "PROD.COM".to_string()
-      };
+      let expected_kerberos_name =
+        KerberosName { user: "a_b".to_string(), host: None, domain: "PROD.COM".to_string() };
 
       let expected_user = User {
         shortname: "a_b".to_string(),
         fullname: "a_b@PROD.COM".to_string(),
-        kind: UserKind::Kerberos
+        kind: UserKind::Kerberos,
       };
 
-
-      assert_eq!(expected_kerberos_name, KerberosName::from_str(source).expect("Failed to parse kerberos name"));
+      assert_eq!(
+        expected_kerberos_name,
+        KerberosName::from_str(source).expect("Failed to parse kerberos name")
+      );
       assert_eq!(expected_user, User::from_kerberos_name(source).expect("Failed to create user!"));
     }
 
@@ -178,16 +165,19 @@ mod tests {
       let expected_kerberos_name = KerberosName {
         user: "a_b".to_string(),
         host: Some("test1.stratus.com".to_string()),
-        domain: "PROD.COM".to_string()
+        domain: "PROD.COM".to_string(),
       };
 
-      let expected_user =User {
+      let expected_user = User {
         shortname: "a_b".to_string(),
         fullname: "a_b/test1.stratus.com@PROD.COM".to_string(),
-        kind: UserKind::Kerberos
-      }; 
+        kind: UserKind::Kerberos,
+      };
 
-      assert_eq!(expected_kerberos_name, KerberosName::from_str(source).expect("Failed to parse kerberos name"));
+      assert_eq!(
+        expected_kerberos_name,
+        KerberosName::from_str(source).expect("Failed to parse kerberos name")
+      );
       assert_eq!(expected_user, User::from_kerberos_name(source).expect("Failed to create user!"));
     }
 
@@ -202,7 +192,7 @@ mod tests {
       assert!(KerberosName::from_str(source).is_err());
       assert!(User::from_kerberos_name(source).is_err());
     }
-    
+
     {
       let source = "ab/hos^@PROD.com";
       assert!(KerberosName::from_str(source).is_err());

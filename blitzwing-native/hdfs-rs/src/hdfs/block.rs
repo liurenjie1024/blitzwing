@@ -9,7 +9,6 @@ use crate::{
 use crate::utils::proto::ProtobufTranslate;
 use protobuf::RepeatedField;
 
-
 #[derive(Debug, Clone)]
 pub struct LocatedBlocks {
   file_len: usize,
@@ -46,7 +45,6 @@ pub struct Block {
   generation_stamp: u64,
 }
 
-
 impl LocatedBlocks {
   pub fn get_file_len(&self) -> usize {
     self.file_len
@@ -73,7 +71,7 @@ impl LocatedBlocks {
       Ok(idx) => self.block_at(idx),
       Err(idx) => {
         if idx == 0 {
-        // The offset is even smaller than the first block, this is possible because client may fetch block not starting from 0
+          // The offset is even smaller than the first block, this is possible because client may fetch block not starting from 0
           None
         } else {
           // We need to double check whether previous block contains this offset
@@ -85,7 +83,8 @@ impl LocatedBlocks {
           }
         }
       }
-    }}
+    }
+  }
 
   pub fn blocks(self) -> impl Iterator<Item = LocatedBlock> {
     self.blocks.into_iter()
@@ -244,17 +243,17 @@ mod tests {
       last_block_complete: true,
       last_located_block: None,
       blocks: vec![block1.clone(), block2.clone()],
-      under_construction: false
+      under_construction: false,
     };
 
-    assert_eq!(Some(&block1), blocks.find_block(0)); 
-    assert_eq!(Some(&block1), blocks.find_block(9)); 
-    assert_eq!(None, blocks.find_block(10)); 
-    assert_eq!(None, blocks.find_block(11)); 
+    assert_eq!(Some(&block1), blocks.find_block(0));
+    assert_eq!(Some(&block1), blocks.find_block(9));
+    assert_eq!(None, blocks.find_block(10));
+    assert_eq!(None, blocks.find_block(11));
 
-    assert_eq!(Some(&block2), blocks.find_block(15)); 
-    assert_eq!(Some(&block2), blocks.find_block(20)); 
-    assert_eq!(None, blocks.find_block(25)); 
-    assert_eq!(None, blocks.find_block(30)); 
+    assert_eq!(Some(&block2), blocks.find_block(15));
+    assert_eq!(Some(&block2), blocks.find_block(20));
+    assert_eq!(None, blocks.find_block(25));
+    assert_eq!(None, blocks.find_block(30));
   }
 }

@@ -7,7 +7,7 @@ use crate::{
   proto::parquet::{ParquetReaderProto, RowGroupProto},
   types::ColumnDescProtoPtr,
   util::{
-    concat_reader::{create_page_reader, PageReaderIteratorRef, PageReaderRef},
+    reader::{create_page_reader, PageReaderIteratorRef, PageReaderRef},
     shared_queue::SharedQueue,
   },
 };

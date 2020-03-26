@@ -1,21 +1,26 @@
-use tokio::io::AsyncReadExt;
-use std::fmt::Formatter;
-use std::fmt::Debug;
-use crate::error::HdfsLibErrorKind::IoError;
-use tokio::io::AsyncWriteExt;
-use crate::hadoop_proto::RpcHeader::RpcRequestHeaderProto_OperationProto;
-use crate::hadoop_proto::RpcHeader::RpcRequestHeaderProto;
-use crate::hadoop_proto::RpcHeader::RpcKindProto;
-use crate::error::{HdfsLibErrorKind, HdfsLibErrorKind::ProtobufError, Result};
-use crate::hadoop_proto::RpcHeader::{RpcResponseHeaderProto, RpcResponseHeaderProto_RpcStatusProto};
+use crate::{
+  error::{
+    HdfsLibErrorKind,
+    HdfsLibErrorKind::{IoError, ProtobufError},
+    Result, RpcRemoteErrorInfo,
+  },
+  hadoop_proto::RpcHeader::{
+    RpcKindProto, RpcRequestHeaderProto, RpcRequestHeaderProto_OperationProto,
+    RpcResponseHeaderProto, RpcResponseHeaderProto_RpcStatusProto,
+  },
+};
+use bytes::{
+  buf::ext::{BufExt, BufMutExt},
+  BufMut, Bytes, BytesMut,
+};
 use failure::ResultExt;
 use protobuf::{CodedInputStream, Message};
-use std::{io::Write, ops::Deref};
-use bytes::{
-  buf::ext::{BufMutExt, BufExt},
-  BufMut, BytesMut, Bytes,
+use std::{
+  fmt::{Debug, Formatter},
+  io::Write,
+  ops::Deref,
 };
-use crate::error::RpcRemoteErrorInfo;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 pub(super) struct RpcResponse {
   pub(super) header: RpcResponseHeaderProto,
@@ -109,49 +114,55 @@ pub fn deserialize<M: Message>(input: &mut CodedInputStream) -> Result<M> {
 pub(crate) fn make_rpc_request_header<B: AsRef<[u8]>>(
   call_id: i32,
   retry_count: i32,
-  rpc_op: RpcRequestHeaderProto_OperationProto, client_id: B) -> RpcRequestHeaderProto {
-    let mut rpc_request_header = RpcRequestHeaderProto::new();
-    rpc_request_header.set_rpcKind(RpcKindProto::RPC_PROTOCOL_BUFFER);
-    rpc_request_header.set_rpcOp(rpc_op);
-    rpc_request_header.set_callId(call_id);
-    rpc_request_header.set_clientId(Vec::from(client_id.as_ref()));
-    rpc_request_header.set_retryCount(retry_count);
+  rpc_op: RpcRequestHeaderProto_OperationProto,
+  client_id: B,
+) -> RpcRequestHeaderProto {
+  let mut rpc_request_header = RpcRequestHeaderProto::new();
+  rpc_request_header.set_rpcKind(RpcKindProto::RPC_PROTOCOL_BUFFER);
+  rpc_request_header.set_rpcOp(rpc_op);
+  rpc_request_header.set_callId(call_id);
+  rpc_request_header.set_clientId(Vec::from(client_id.as_ref()));
+  rpc_request_header.set_retryCount(retry_count);
 
-    rpc_request_header
-  }
-
-pub(super) async fn send_rpc_request<W: AsyncWriteExt + Unpin, M: Message>(w: &mut W, header: &RpcRequestHeaderProto, body: &M) -> Result<()> {
-  let messages = [header as &dyn Message, body as &dyn Message];
-    let request = Messages::new(&messages);
-    let serialized_len = request.get_serialized_len()?;
-
-    let mut buffer = BytesMut::with_capacity(4 + serialized_len);
-    buffer.put_i32(serialized_len as i32);
-
-    let mut writer = buffer.writer();
-    request.serialize(&mut writer)?;
-
-    let buffer = writer.into_inner();
-
-    w.write_all(buffer.as_ref()).await.context(IoError)?;
-
-    Ok(())
+  rpc_request_header
 }
 
-pub(super) async fn receive_rpc_response<R: AsyncReadExt + Unpin>(reader: &mut R) -> Result<RpcResponse> {
+pub(super) async fn send_rpc_request<W: AsyncWriteExt + Unpin, M: Message>(
+  w: &mut W,
+  header: &RpcRequestHeaderProto,
+  body: &M,
+) -> Result<()> {
+  let messages = [header as &dyn Message, body as &dyn Message];
+  let request = Messages::new(&messages);
+  let serialized_len = request.get_serialized_len()?;
+
+  let mut buffer = BytesMut::with_capacity(4 + serialized_len);
+  buffer.put_i32(serialized_len as i32);
+
+  let mut writer = buffer.writer();
+  request.serialize(&mut writer)?;
+
+  let buffer = writer.into_inner();
+
+  w.write_all(buffer.as_ref()).await.context(IoError)?;
+
+  Ok(())
+}
+
+pub(super) async fn receive_rpc_response<R: AsyncReadExt + Unpin>(
+  reader: &mut R,
+) -> Result<RpcResponse> {
   let response_length = reader.read_i32().await.context(IoError)? as usize;
-      let mut buffer = BytesMut::new();
-      buffer.resize(response_length, 0);
-      reader.read_exact(buffer.as_mut()).await.context(IoError)?;
+  let mut buffer = BytesMut::new();
+  buffer.resize(response_length, 0);
+  reader.read_exact(buffer.as_mut()).await.context(IoError)?;
 
-      let buffer = buffer.freeze();
+  let buffer = buffer.freeze();
 
-      let mut input_stream = CodedInputStream::from_bytes(buffer.as_ref());
-      let header =
-        deserialize::<RpcResponseHeaderProto>(&mut input_stream).context(ProtobufError)?;
+  let mut input_stream = CodedInputStream::from_bytes(buffer.as_ref());
+  let header = deserialize::<RpcResponseHeaderProto>(&mut input_stream).context(ProtobufError)?;
 
-
-      Ok(RpcResponse { header, body: buffer.slice(input_stream.pos() as usize..) })
+  Ok(RpcResponse { header, body: buffer.slice(input_stream.pos() as usize..) })
 }
 
 fn size_of_varint32(mut value: u32) -> u32 {

@@ -1,9 +1,7 @@
-use crate::rpc::auth::AuthMethod::Token;
-use crate::rpc::auth::AuthMethod::Simple;
-use crate::rpc::auth::AuthMethod::Digest;
-use crate::rpc::auth::AuthMethod::Plain;
-use crate::rpc::auth::AuthMethod::Kerberos;
-use crate::error::Result;
+use crate::{
+  error::Result,
+  rpc::auth::AuthMethod::{Digest, Kerberos, Plain, Simple, Token},
+};
 use std::ops::Deref;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
@@ -12,7 +10,7 @@ pub(crate) enum AuthMethod {
   Kerberos,
   Digest,
   Token,
-  Plain
+  Plain,
 }
 
 pub(crate) struct AuthMethodValue {
@@ -32,22 +30,13 @@ impl AuthMethodValue {
 
 const AUTH_METHOD_SIMPLE: AuthMethodValue = AuthMethodValue { code: 80i8, mechanism_name: "" };
 
-const AUTH_METHOD_KERBEROS: AuthMethodValue = AuthMethodValue {
-   code: 81i8,
-   mechanism_name: "GSSAPI",
-};
-const AUTH_METHOD_DIGEST: AuthMethodValue = AuthMethodValue {
-   code: 82i8,
-   mechanism_name: "DIGEST-MD5",
-};
-const AUTH_METHOD_TOKEN: AuthMethodValue = AuthMethodValue {
-   code: 82i8,
-   mechanism_name: "DIGEST-MD5",
-};
-const AUTH_METHOD_PLAIN: AuthMethodValue = AuthMethodValue {
-   code: 83i8,
-   mechanism_name: "PLAIN",
-};
+const AUTH_METHOD_KERBEROS: AuthMethodValue =
+  AuthMethodValue { code: 81i8, mechanism_name: "GSSAPI" };
+const AUTH_METHOD_DIGEST: AuthMethodValue =
+  AuthMethodValue { code: 82i8, mechanism_name: "DIGEST-MD5" };
+const AUTH_METHOD_TOKEN: AuthMethodValue =
+  AuthMethodValue { code: 82i8, mechanism_name: "DIGEST-MD5" };
+const AUTH_METHOD_PLAIN: AuthMethodValue = AuthMethodValue { code: 83i8, mechanism_name: "PLAIN" };
 
 impl Deref for AuthMethod {
   type Target = AuthMethodValue;
@@ -70,7 +59,7 @@ impl AuthMethod {
       "DIGEST" => Ok(Digest),
       "TOKEN" => Ok(Token),
       "PLAIN" => Ok(Plain),
-      s => invalid_argument!("Unrecognized auth method name: {}", s) 
+      s => invalid_argument!("Unrecognized auth method name: {}", s),
     }
   }
 }
@@ -83,10 +72,10 @@ pub(crate) enum AuthProtocol {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub(crate) struct AuthProtocolValue {
-  call_id: i32
+  call_id: i32,
 }
 
-const AUTH_PROTOCOL_NONE: AuthProtocolValue = AuthProtocolValue  { call_id: 0 };
+const AUTH_PROTOCOL_NONE: AuthProtocolValue = AuthProtocolValue { call_id: 0 };
 const AUTH_PROTOCOL_SASL: AuthProtocolValue = AuthProtocolValue { call_id: -33 };
 
 impl Deref for AuthProtocol {
@@ -95,7 +84,7 @@ impl Deref for AuthProtocol {
   fn deref(&self) -> &Self::Target {
     match self {
       AuthProtocol::None => &AUTH_PROTOCOL_NONE,
-      AuthProtocol::Sasl => &AUTH_PROTOCOL_SASL
+      AuthProtocol::Sasl => &AUTH_PROTOCOL_SASL,
     }
   }
 }
@@ -115,8 +104,7 @@ impl AuthProtocol {
 
 #[cfg(test)]
 mod tests {
-  use super::*;
-  use super::AuthProtocol::*;
+  use super::{AuthProtocol::*, *};
 
   #[test]
   fn test_auth_method() {
@@ -138,7 +126,7 @@ mod tests {
 
   #[test]
   fn test_auth_protocol() {
-    assert_eq!(0,   AuthProtocol::None.call_id());
+    assert_eq!(0, AuthProtocol::None.call_id());
     assert_eq!(-33, Sasl.call_id());
   }
 }

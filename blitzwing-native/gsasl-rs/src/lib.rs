@@ -11,7 +11,7 @@ extern crate lazy_static;
 #[macro_use]
 extern crate derive_new;
 
+pub mod bindings;
 pub mod client;
 pub mod error;
-pub mod bindings;
 pub(crate) mod utils;

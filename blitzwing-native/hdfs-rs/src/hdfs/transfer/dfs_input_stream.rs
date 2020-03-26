@@ -189,13 +189,16 @@ impl DFSInputStream {
     debug!("Find block [{:?}], pos [{}], file [{}]", &block, self.seek_pos, self.filename);
     match self.choose_datanode(&block) {
       Ok(datanode) => {
-        debug!("Choose datanode for block [{:?}], offset: [{}], datanode: [{:?}]", block, self.seek_pos, datanode);
-        
+        debug!(
+          "Choose datanode for block [{:?}], offset: [{}], datanode: [{:?}]",
+          block, self.seek_pos, datanode
+        );
+
         let block_start_offset = self.seek_pos - block.offset();
         let block_bytes_to_read = block.get_len() - block_start_offset;
         let block_reader_args = BlockReaderArgs::new(
           block_start_offset,
-          block_bytes_to_read ,
+          block_bytes_to_read,
           false,
           "test_client".to_string(),
           datanode.clone(),

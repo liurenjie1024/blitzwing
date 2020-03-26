@@ -2,7 +2,7 @@ use crate::{
   error::{BlitzwingErrorKind::ArrowError, Result},
   parquet_adapter::record_reader::RecordReader,
   types::ColumnDescProtoPtr,
-  util::{buffer::MutableBufferOps, concat_reader::PageReaderIteratorRef, num::Cast},
+  util::{buffer::MutableBufferOps, num::Cast, reader::PageReaderIteratorRef},
 };
 use arrow::{
   array::{

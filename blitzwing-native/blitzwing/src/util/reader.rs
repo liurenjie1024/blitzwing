@@ -8,44 +8,9 @@ use failure::ResultExt;
 use parquet::{column::page::PageReader, file::reader::SerializedPageReader};
 use std::{
   convert::TryInto,
-  io::{Cursor, Read, Result as IoResult},
+  io::{Cursor, Read},
   mem::transmute,
 };
-
-pub(crate) struct ConcatReader<T: Read> {
-  readers: Vec<T>,
-  idx: usize,
-}
-
-impl<T: Read> Read for ConcatReader<T> {
-  fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
-    let mut bytes_read: usize = 0;
-
-    loop {
-      if self.idx >= self.readers.len() || bytes_read >= buf.len() {
-        break;
-      }
-
-      let current_buf = &mut buf[bytes_read..];
-
-      let batch_read = (&mut self.readers[self.idx]).read(current_buf)?;
-
-      bytes_read += batch_read;
-
-      if batch_read == 0 {
-        self.idx += 1;
-      }
-    }
-
-    Ok(bytes_read)
-  }
-}
-
-impl<T: Read> ConcatReader<T> {
-  fn new(readers: Vec<T>) -> Self {
-    Self { readers, idx: 0 }
-  }
-}
 
 pub(crate) type PageReaderRef = Box<dyn PageReader>;
 pub(crate) type PageReaderIteratorRef =
@@ -83,10 +48,12 @@ pub(crate) fn page_reader_from_read<R: Read>(
 }
 
 pub(crate) fn column_chunk_to_read(column_chunk: &ColumnChunkProto) -> Result<impl Read> {
-  let readers =
-    column_chunk.get_segments().iter().map(segment_to_read).collect::<Result<Vec<_>>>()?;
-
-  Ok(ConcatReader::new(readers))
+  let empty_reader: Box<dyn Read> = Box::new(Cursor::new(Vec::<u8>::new()));
+  column_chunk
+    .get_segments()
+    .iter()
+    .map(segment_to_read)
+    .try_fold(empty_reader, |b, r| r.map(|rr| Box::new(rr.chain(b)) as Box<dyn Read>))
 }
 
 pub(crate) fn segment_to_read(segment: &SegmentProto) -> Result<impl Read> {
