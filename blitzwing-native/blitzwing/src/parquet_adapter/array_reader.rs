@@ -2,7 +2,6 @@ use crate::error::BlitzwingErrorKind::ArrowError;
 use crate::types::ColumnDescProtoPtr;
 use arrow::datatypes::ArrowNativeType;
 use crate::util::buffer::MutableBufferOps;
-use crate::proto::parquet::ColumnChunkProto;
 use crate::parquet_adapter::record_reader::RecordReader;
 use crate::util::num::Cast;
 use crate::error::Result;
@@ -44,7 +43,6 @@ use crate::util::concat_reader::PageReaderIteratorRef;
 pub trait ArrayReader {
     fn data_type(&self) -> &DataType;
     fn next_batch(&mut self) -> Result<ArrayRef>;
-    fn set_data(&mut self, column_chunk: &ColumnChunkProto);
     fn reset_batch(&mut self) -> Result<()>;
 }
 
@@ -129,8 +127,9 @@ where
         Ok(Arc::new(array))
     }
 
-    fn reset_batch(&mut self) -> Result<()> { todo!() }
-    fn set_data(&mut self, _: &ColumnChunkProto) { todo!() }
+    fn reset_batch(&mut self) -> Result<()> { 
+        Ok(self.record_reader.reset_batch())
+    }
 }
 
 pub struct VarLenArrayReader<A, P>
@@ -226,8 +225,9 @@ where
         Ok(Arc::new(A::from(array_data.build())))
     }
     
-    fn reset_batch(&mut self) -> Result<()> { todo!() }
-    fn set_data(&mut self, _: &ColumnChunkProto) { todo!() }
+    fn reset_batch(&mut self) -> Result<()> { 
+        Ok(self.record_reader.reset_batch())
+     }
 }
 
 pub type Int8ArrayReader = PrimitiveArrayReader<Int8Type, ParquetInt32Type>;

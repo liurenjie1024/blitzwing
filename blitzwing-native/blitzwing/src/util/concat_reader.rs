@@ -67,17 +67,6 @@ pub(crate) fn create_page_reader(column_desc: &ColumnDescProto, column_chunk: &C
     .context(ParquetError)?)
 }
 
-pub(crate) fn empty_page_reader(column_desc: &ColumnDescProto) -> Result<impl PageReader> {
-  let reader = Cursor::new(Vec::<u8>::new()) ;
-  let num_values = 0;
-  let compression = column_desc.get_compression().try_into()?;
-  let physical_type = column_desc.get_physical_type().try_into()?;
-
-  Ok(SerializedPageReader::new(reader, num_values, compression, physical_type)
-    .context(ParquetError)?)
-}
-
-
 pub(crate) fn page_reader_from_read<R: Read>(column_desc: &ColumnDescProto, reader: R, num_values:  i64) -> Result<SerializedPageReader<R>> {
   Ok(SerializedPageReader::new(reader, num_values, column_desc.get_compression().try_into()?, column_desc.get_physical_type().try_into()?).context(ParquetError)?)
 }

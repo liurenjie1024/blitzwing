@@ -10,12 +10,17 @@ use failure::ResultExt;
 
 
 
-#[derive(Clone)]
 pub(crate) struct SharedQueue<T> {
-  page_readers: Rc<RefCell<VecDeque<T>>>,
+  queue: Rc<RefCell<VecDeque<T>>>,
 }
 
 impl<T> SharedQueue<T> {
+  pub(crate) fn new() -> Self {
+    Self {
+      queue: Rc::new(RefCell::new(VecDeque::new()))
+    }
+  }
+
   pub(crate) fn push(&self, t: T) -> Result<()> {
     let mut queue = self.queue_mut()?;
     queue.push_back(t);
@@ -33,7 +38,15 @@ impl<T> SharedQueue<T> {
   }
 
   fn queue_mut(&self) -> Result<RefMut<VecDeque<T>>> {
-    Ok(self.page_readers.try_borrow_mut().context(FatalError("Unable to borrow page reader queue".to_string()))?)
+    Ok(self.queue.try_borrow_mut().context(FatalError("Unable to borrow page reader queue".to_string()))?)
+  }
+}
+
+impl<T> Clone for SharedQueue<T> {
+  fn clone(&self) -> Self {
+    Self {
+      queue: self.queue.clone()
+    }
   }
 }
 
