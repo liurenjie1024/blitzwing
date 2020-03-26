@@ -1589,9 +1589,9 @@ static file_descriptor_proto_data: &'static [u8] = b"\
     \x1a.ParquetProto.PhysicalType\x12.\n\x0bcompression\x18\x05\x20\x02(\
     \x0e2\x19.ParquetProto.Compression\"_\n\x12ParquetReaderProto\x12\x12\n\
     \nbatch_size\x18\x01\x20\x02(\x05\x12%\n\x0bcolumn_desc\x18\x02\x20\x03(\
-    \x0b2\x10.ColumnDescProto\x12\x0e\n\x06schema\x18\x03\x20\x02(\x0cBI\n9c\
-    om.ebay.hadoop.blitzwing.generated.arrow.adaptor.parquetB\x0cParquetProt\
-    o\
+    \x0b2\x10.ColumnDescProto\x12\x0e\n\x06schema\x18\x03\x20\x02(\x0cBN\n9c\
+    om.ebay.hadoop.blitzwing.generated.arrow.adaptor.parquetB\x11ParquetProt\
+    oOuter\
 ";
 
 static mut file_descriptor_proto_lazy: ::protobuf::lazy::Lazy<::protobuf::descriptor::FileDescriptorProto> = ::protobuf::lazy::Lazy {

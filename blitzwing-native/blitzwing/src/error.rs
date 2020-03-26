@@ -29,6 +29,8 @@ pub enum BlitzwingErrorKind {
   NotYetImplementedError(String),
   #[fail(display = "Invalid argument: {}", _0)]
   InvalidArgumentError(String),
+  #[fail(display = "Null pointer")]
+  NullPointerError
 }
 
 impl BlitzwingError {

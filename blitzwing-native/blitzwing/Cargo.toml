@@ -17,6 +17,7 @@ failure = "0.1.6"
 failure_derive = "0.1.6"
 derive-new = "0.5"
 num = "0.2"
+lazy_static = "1.4.0"
 
 [build-dependencies]
 protoc-rust = "2.0"

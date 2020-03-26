@@ -14,5 +14,11 @@ dependencies {
 
 java {
     sourceCompatibility = JavaVersion.VERSION_1_8
+    tasks.compileJava {
+        options.compilerArgs.addAll(listOf("-h", file("build/generated/headers").absolutePath))
+    }
+    tasks.test {
+        testLogging.showStandardStreams = true
+    }
 }
 
