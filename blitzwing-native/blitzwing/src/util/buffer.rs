@@ -1,16 +1,15 @@
-use arrow::buffer::Buffer;
-use arrow::buffer::MutableBuffer;
-use arrow::datatypes::ArrowNativeType;
+use arrow::{
+  buffer::{Buffer, MutableBuffer},
+  datatypes::ArrowNativeType,
+};
 
 pub(crate) struct BufferOps {
-  inner: Buffer
+  inner: Buffer,
 }
 
 impl BufferOps {
   pub(crate) fn new(inner: Buffer) -> Self {
-    Self {
-      inner
-    }
+    Self { inner }
   }
 }
 
@@ -21,21 +20,21 @@ impl AsRef<[u8]> for BufferOps {
 }
 
 pub(crate) struct MutableBufferOps {
-  inner: MutableBuffer
+  inner: MutableBuffer,
 }
 
 impl<T: ArrowNativeType + num::Num> AsMut<[T]> for MutableBufferOps {
   fn as_mut(&mut self) -> &mut [T] {
     unsafe { self.inner.typed_data_mut() }
-  } 
+  }
 }
 
 impl<T: ArrowNativeType + num::Num> AsRef<[T]> for MutableBufferOps {
   fn as_ref(&self) -> &[T] {
     unsafe { self.inner.typed_data() }
-  } 
+  }
 }
- 
+
 impl MutableBufferOps {
   pub(crate) fn new(inner: MutableBuffer) -> Self {
     Self { inner }

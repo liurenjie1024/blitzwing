@@ -1,14 +1,13 @@
-use crate::error::BlitzwingError;
-use crate::util::try_iterator::TryIterator;
-use std::cell::RefMut;
-use std::collections::VecDeque;
-use std::cell::RefCell;
-use std::rc::Rc;
-use crate::error::Result;
-use crate::error::BlitzwingErrorKind::FatalError;
+use crate::{
+  error::{BlitzwingError, BlitzwingErrorKind::FatalError, Result},
+  util::try_iterator::TryIterator,
+};
 use failure::ResultExt;
-
-
+use std::{
+  cell::{RefCell, RefMut},
+  collections::VecDeque,
+  rc::Rc,
+};
 
 pub(crate) struct SharedQueue<T> {
   queue: Rc<RefCell<VecDeque<T>>>,
@@ -16,9 +15,7 @@ pub(crate) struct SharedQueue<T> {
 
 impl<T> SharedQueue<T> {
   pub(crate) fn new() -> Self {
-    Self {
-      queue: Rc::new(RefCell::new(VecDeque::new()))
-    }
+    Self { queue: Rc::new(RefCell::new(VecDeque::new())) }
   }
 
   pub(crate) fn push(&self, t: T) -> Result<()> {
@@ -32,26 +29,27 @@ impl<T> SharedQueue<T> {
   }
 
   pub(crate) fn into_iterator(self) -> impl TryIterator<Error = BlitzwingError, Item = T> {
-    SharedQueueIterator {
-      queue: self
-    }
+    SharedQueueIterator { queue: self }
   }
 
   fn queue_mut(&self) -> Result<RefMut<VecDeque<T>>> {
-    Ok(self.queue.try_borrow_mut().context(FatalError("Unable to borrow page reader queue".to_string()))?)
+    Ok(
+      self
+        .queue
+        .try_borrow_mut()
+        .context(FatalError("Unable to borrow page reader queue".to_string()))?,
+    )
   }
 }
 
 impl<T> Clone for SharedQueue<T> {
   fn clone(&self) -> Self {
-    Self {
-      queue: self.queue.clone()
-    }
+    Self { queue: self.queue.clone() }
   }
 }
 
 struct SharedQueueIterator<T> {
-  queue: SharedQueue<T>
+  queue: SharedQueue<T>,
 }
 
 /// This iterator differs from normal iterator in that it may still return Some(T) even after it return None
@@ -62,4 +60,3 @@ impl<T> TryIterator for SharedQueueIterator<T> {
     self.queue.pop()
   }
 }
-

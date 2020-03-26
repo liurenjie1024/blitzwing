@@ -1,15 +1,18 @@
-use crate::proto::parquet::ColumnDescProto;
-use std::rc::Rc;
+use crate::{
+  error::{BlitzwingError, Result},
+  proto::parquet::{
+    ColumnDescProto, ParquetProto_Compression as CompressionProto,
+    ParquetProto_PhysicalType as TypeProto,
+  },
+};
 use parquet::basic::{Compression, Type};
-use crate::proto::parquet::{ParquetProto_Compression as CompressionProto, ParquetProto_PhysicalType as TypeProto};
-use std::convert::TryFrom;
-use crate::error::{BlitzwingError, Result};
+use std::{convert::TryFrom, rc::Rc};
 
 pub(crate) type ColumnDescProtoPtr = Rc<ColumnDescProto>;
 
 impl TryFrom<TypeProto> for Type {
   type Error = BlitzwingError;
-  fn try_from(proto: TypeProto) -> Result<Self> { 
+  fn try_from(proto: TypeProto) -> Result<Self> {
     Ok(match proto {
       TypeProto::BOOLEAN => Type::BOOLEAN,
       TypeProto::BYTE_ARRAY => Type::BYTE_ARRAY,
@@ -18,9 +21,9 @@ impl TryFrom<TypeProto> for Type {
       TypeProto::FLOAT => Type::FLOAT,
       TypeProto::INT32 => Type::INT32,
       TypeProto::INT64 => Type::INT64,
-      TypeProto::INT96 => Type::INT96
+      TypeProto::INT96 => Type::INT96,
     })
- }
+  }
 }
 
 impl TryFrom<CompressionProto> for Compression {
