@@ -82,6 +82,14 @@ impl ParquetReader {
 
     Ok(())
   }
+
+  pub(crate) fn close(&mut self) -> Result<()> {
+    Ok(())
+  }
+
+  pub(crate) fn free_buffer(&mut self, _buffer_id: *const u8) -> Result<()> {
+    Ok(())
+  }
 }
 
 pub(crate) fn create_parquet_reader(meta: ParquetReaderProto) -> Result<ParquetReader> {

@@ -1,47 +1,36 @@
-use crate::error::{Result, BlitzwingErrorKind::{JniError, ProtobufError, NullPointerError}};
-use jni::JNIEnv;
-use jni::sys::{jbyteArray, jlong};
-use protobuf::{Message, parse_from_bytes};
+use crate::error::{
+  BlitzwingError,
+  BlitzwingErrorKind::{JniError, NullPointerError, ProtobufError},
+  Result,
+};
 use failure::ResultExt;
-use std::mem::transmute;
-use std::ptr::NonNull;
+use jni::{
+  sys::{jbyteArray, jlong},
+  JNIEnv,
+};
+use protobuf::{parse_from_bytes, Message};
+use std::{mem::transmute, ptr::NonNull};
 
-pub(crate) fn process_result<T>(env: JNIEnv, result: Result<T>) -> T
-where
-    T: Default,
-{
-    process_result_with(env, result, T::default)
+pub(crate) fn throw_exception(env: JNIEnv, e: BlitzwingError) -> () {
+  match env.throw_new(
+    "com/ebay/hadoop/blitzwing/exception/BlitzwingException",
+    format!("Failed to build executor: {:?}", e),
+  ) {
+    Err(e) => eprintln!("Failed to throw exception: {}", e),
+    _ => (),
+  }
 }
 
-pub(crate) fn process_result_with<T, F>(env: JNIEnv, result: Result<T>, f: F) -> T
-where
-    F: FnOnce() -> T,
-{
-    match result {
-        Ok(t) => t,
-        Err(e) => {
-            match env.throw(format!("Failed to build executor: {:?}", e)) {
-                Err(e) => eprintln!("Failed to throw exception: {}", e),
-                _ => {}
-            }
-            f()
-        }
-    }
-}
-
-pub(crate) fn deserialize_from_byte_array<M: Message>(env: JNIEnv, bytes: jbyteArray) -> Result<M> {
+pub(crate) fn deserialize<M: Message>(env: JNIEnv, bytes: jbyteArray) -> Result<M> {
   let bytes = env.convert_byte_array(bytes).context(JniError)?;
   Ok(parse_from_bytes(&bytes).context(ProtobufError)?)
 }
 
-pub(crate) fn into_raw<T>(t: Box<T>) -> jlong {
-  unsafe { transmute(Box::into_raw(t)) }
-}
+pub(crate) fn serialize<M: Message>(env: JNIEnv, message: M) -> Result<jbyteArray> {
+  let mut buffer = Vec::with_capacity(message.compute_size() as usize);
+  message.write_to_vec(&mut buffer).context(ProtobufError)?;
 
-pub(crate) fn from_raw<T>(address: jlong) -> Box<T> {
-  unsafe {
-    Box::from_raw(transmute::<jlong, *mut T>(address)) 
-  }
+  Ok(env.byte_array_from_slice(&buffer).context(JniError)?)
 }
 
 pub(crate) struct JniWrapper<'a, T> {
@@ -52,32 +41,23 @@ pub(crate) struct JniWrapper<'a, T> {
 impl<'a, T> JniWrapper<'a, T> {
   pub(crate) fn new(env: JNIEnv<'a>, address: jlong) -> Result<Self> {
     unsafe {
-    if let Some(inner) = NonNull::new(transmute(address)) {
-      Ok(Self {
-        env,
-        inner
-      })
-    } else {
-      Err(NullPointerError)?
-    }
+      if let Some(inner) = NonNull::new(transmute(address)) {
+        Ok(Self { env, inner })
+      } else {
+        Err(NullPointerError)?
+      }
     }
   }
 
-  pub(crate) fn with_inner<F, D, R>(&self, f: F, defaults: D) -> R 
-    where F: FnOnce(&T) -> Result<R>,
-          D: FnOnce() -> R,
-  {
-    unsafe {
-    process_result_with(self.env.clone(), f(self.inner.as_ref()), defaults)
-    }
+  pub(crate) fn inner(&self) -> &T {
+    unsafe { self.inner.as_ref() }
   }
 
-  pub(crate) fn with_inner_mut<F, D, R>(&mut self, f: F, defaults: D) -> R 
-    where F: FnOnce(&mut T) -> Result<R>,
-          D: FnOnce() -> R,
-  {
-    unsafe {
-    process_result_with(self.env.clone(), f(self.inner.as_mut()), defaults)
-    }
+  pub(crate) fn inner_mut(&mut self) -> &mut T {
+    unsafe { self.inner.as_mut() }
+  }
+
+  pub(crate) fn into_box(self) -> Box<T> {
+    unsafe { Box::from_raw(self.inner.as_ptr()) }
   }
 }

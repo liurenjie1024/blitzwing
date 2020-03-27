@@ -1,10 +1,14 @@
 use crate::{
   error::{BlitzwingError, Result},
-  proto::parquet::{
-    ColumnDescProto, ParquetProto_Compression as CompressionProto,
-    ParquetProto_PhysicalType as TypeProto,
+  proto::{
+    parquet::{
+      ColumnDescProto, ParquetProto_Compression as CompressionProto,
+      ParquetProto_PhysicalType as TypeProto,
+    },
+    record_batch::{JniBufferNodeProto, JniRecordBatchProto, JniValueNodeProto},
   },
 };
+use arrow::record_batch::RecordBatch;
 use parquet::basic::{Compression, Type};
 use std::{convert::TryFrom, rc::Rc};
 
@@ -38,5 +42,45 @@ impl TryFrom<CompressionProto> for Compression {
       CompressionProto::UNCOMPRESSED => Compression::UNCOMPRESSED,
       CompressionProto::ZSTD => Compression::ZSTD,
     })
+  }
+}
+
+impl<'a> TryFrom<&'a RecordBatch> for JniRecordBatchProto {
+  type Error = BlitzwingError;
+  fn try_from(record_batch: &'a RecordBatch) -> Result<Self> {
+    let mut jni_record_batch = JniRecordBatchProto::new();
+    jni_record_batch.set_length(record_batch.num_rows() as i32);
+    for i in 0..record_batch.num_columns() {
+      let array = record_batch.column(i);
+
+      let mut jni_value_node = JniValueNodeProto::new();
+      jni_value_node.set_length(array.len() as i32);
+      jni_value_node.set_null_count(array.null_count() as i32);
+      jni_record_batch.mut_nodes().push(jni_value_node);
+
+      if let Some(null_buffer) = array.data_ref().null_buffer() {
+        let mut jni_buffer_node = JniBufferNodeProto::new();
+        jni_buffer_node.set_address(null_buffer.raw_data() as i64);
+        jni_buffer_node.set_length(null_buffer.len() as i32);
+
+        jni_record_batch.mut_buffers().push(jni_buffer_node);
+      } else {
+        let mut jni_buffer_node = JniBufferNodeProto::new();
+        jni_buffer_node.set_address(0i64);
+        jni_buffer_node.set_length(0i32);
+
+        jni_record_batch.mut_buffers().push(jni_buffer_node);
+      }
+
+      for buffer in array.data_ref().buffers() {
+        let mut jni_buffer_node = JniBufferNodeProto::new();
+        jni_buffer_node.set_address(buffer.raw_data() as i64);
+        jni_buffer_node.set_length(buffer.len() as i32);
+
+        jni_record_batch.mut_buffers().push(jni_buffer_node);
+      }
+    }
+
+    Ok(jni_record_batch)
   }
 }

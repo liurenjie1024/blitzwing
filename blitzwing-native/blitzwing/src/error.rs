@@ -30,7 +30,7 @@ pub enum BlitzwingErrorKind {
   #[fail(display = "Invalid argument: {}", _0)]
   InvalidArgumentError(String),
   #[fail(display = "Null pointer")]
-  NullPointerError
+  NullPointerError,
 }
 
 impl BlitzwingError {

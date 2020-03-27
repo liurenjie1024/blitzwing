@@ -1,51 +1,99 @@
-use jni::sys::{jlong, jbyteArray};
-use jni::JNIEnv;
-use jni::objects::JClass;
-use crate::util::jni_util::{deserialize_from_byte_array, into_raw, from_raw, process_result};
-use crate::parquet_adapter::parquet_reader::create_parquet_reader;
-use crate::error::Result;
-use crate::proto::parquet::{ParquetReaderProto, RowGroupProto};
-use crate::parquet_adapter::parquet_reader::ParquetReader;
-use crate::util::jni_util::JniWrapper;
+use crate::{
+  error::Result,
+  parquet_adapter::parquet_reader::{create_parquet_reader, ParquetReader},
+  proto::{
+    parquet::{ParquetReaderProto, RowGroupProto},
+    record_batch::JniRecordBatchProto,
+  },
+  util::jni_util::{deserialize, serialize, throw_exception, JniWrapper},
+};
+use jni::{
+  objects::JClass,
+  sys::{jbyteArray, jlong},
+  JNIEnv,
+};
+use std::{
+  convert::{identity, TryFrom},
+  mem::transmute,
+  ptr::null_mut,
+};
 
 #[no_mangle]
-pub extern "system" fn Java_com_ebay_hadoop_blitzwing_arrow_adaptor_parquet_JniWrapper_newInstance
- (env: JNIEnv, _klass: JClass , parquet_reader_proto: jbyteArray) -> jlong {
-   let reader = deserialize_from_byte_array::<ParquetReaderProto>(env.clone(), parquet_reader_proto)
+pub extern "system" fn Java_com_ebay_hadoop_blitzwing_arrow_adaptor_parquet_JniWrapper_newInstance(
+  env: JNIEnv,
+  _klass: JClass,
+  parquet_reader_proto: jbyteArray,
+) -> jlong {
+  deserialize::<ParquetReaderProto>(env.clone(), parquet_reader_proto)
     .and_then(create_parquet_reader)
-    .map(|reader| into_raw(Box::new(reader)));
-
-    process_result(env, reader)
+    .map(|reader| unsafe { transmute(Box::into_raw(Box::new(reader))) })
+    .map_err(|e| throw_exception(env, e))
+    .map_or(jlong::default(), identity)
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_ebay_hadoop_blitzwing_arrow_adaptor_parquet_JniWrapper_setRowGroupData<'a>
- (env: JNIEnv<'a>, _klass: JClass, parquet_reader_id: jlong, row_group_proto: jbyteArray) {
-   let set_data = |reader: &mut ParquetReader| -> Result<()> { 
-     let row_group = deserialize_from_byte_array::<RowGroupProto>(env.clone(), row_group_proto)?;
-     reader.set_data(row_group)
-   };
+pub extern "system" fn Java_com_ebay_hadoop_blitzwing_arrow_adaptor_parquet_JniWrapper_setRowGroupData<
+  'a,
+>(
+  env: JNIEnv<'a>,
+  _klass: JClass,
+  parquet_reader_id: jlong,
+  row_group_proto: jbyteArray,
+) {
+  let call_inner = || -> Result<()> {
+    let row_group = deserialize::<RowGroupProto>(env.clone(), row_group_proto)?;
+    JniWrapper::<'a, ParquetReader>::new(env.clone(), parquet_reader_id)
+      .and_then(move |mut w| w.inner_mut().set_data(row_group))
+  };
 
-  let ret = JniWrapper::<'a, ParquetReader>::new(env.clone(), parquet_reader_id)
-   .map(move |mut wrapper| wrapper.with_inner_mut(set_data, || ()));
-
-   process_result(env, ret)
- }
+  call_inner().map_err(|e| throw_exception(env, e)).map_or_else(identity, identity)
+}
 
 #[no_mangle]
-pub extern "system" fn Java_com_ebay_hadoop_blitzwing_arrow_adaptor_parquet_JniWrapper_next
- (env: JNIEnv, _klass: JClass, parquet_reader_id: jlong) -> jbyteArray {
-   let call_next = |reader: &mut ParquetReader| -> Result<jbyteArray> {
-     
-   }
- }
+pub extern "system" fn Java_com_ebay_hadoop_blitzwing_arrow_adaptor_parquet_JniWrapper_next<'a>(
+  env: JNIEnv<'a>,
+  _klass: JClass,
+  parquet_reader_id: jlong,
+) -> jbyteArray {
+  let call_inner = || -> Result<jbyteArray> {
+    let mut wrapper = JniWrapper::<'a, ParquetReader>::new(env.clone(), parquet_reader_id)?;
+    serialize(env.clone(), JniRecordBatchProto::try_from(wrapper.inner_mut().next_batch()?)?)
+  };
 
-fn Java_com_ebay_hadoop_blitzwing_arrow_adaptor_parquet_JniWrapper_freeBuffer
- (env: JNIEnv, klass: JClass, parquet_reader_id: jlong, buffer_id: jlong) {
-   unimplemented!()
- }
+  // TODO: Remember to free buffer
+  call_inner().map_err(|e| throw_exception(env.clone(), e)).map_or(null_mut(), identity)
+}
 
-fn Java_com_ebay_hadoop_blitzwing_arrow_adaptor_parquet_JniWrapper_close
- (env: JNIEnv, klass: JClass, parquet_reader_id: jlong) {
-   unimplemented!()
+#[no_mangle]
+pub extern "system" fn Java_com_ebay_hadoop_blitzwing_arrow_adaptor_parquet_JniWrapper_freeBuffer<
+  'a,
+>(
+  env: JNIEnv<'a>,
+  _klass: JClass,
+  parquet_reader_id: jlong,
+  buffer_id: jlong,
+) {
+  let call_inner = || -> Result<()> {
+    let mut wrapper = JniWrapper::<'a, ParquetReader>::new(env.clone(), parquet_reader_id)?;
+    unsafe { wrapper.inner_mut().free_buffer(transmute(buffer_id)) }
+  };
+
+  call_inner().map_err(|e| throw_exception(env, e)).map_or_else(identity, identity)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_ebay_hadoop_blitzwing_arrow_adaptor_parquet_JniWrapper_close<'a>(
+  env: JNIEnv<'a>,
+  _klass: JClass,
+  parquet_reader_id: jlong,
+) {
+  let call_inner = || -> Result<()> {
+    let mut wrapper = JniWrapper::<'a, ParquetReader>::new(env.clone(), parquet_reader_id)?;
+    wrapper.inner_mut().close()?;
+    // Convert to Box for destruction
+    wrapper.into_box();
+    Ok(())
+  };
+
+  call_inner().map_err(|e| throw_exception(env, e)).map_or_else(identity, identity)
 }
