@@ -5,7 +5,7 @@ import com.ebay.hadoop.blitzwing.generated.vector.RecordBatchProto.JniRecordBatc
 import com.google.protobuf.InvalidProtocolBufferException;
 
 public class JniWrapper implements AutoCloseable {
-  private final long instanceId;
+  private long instanceId;
 
   public JniWrapper(long instanceId) {
     this.instanceId = instanceId;
@@ -26,7 +26,11 @@ public class JniWrapper implements AutoCloseable {
 
   @Override
   public void close() {
-    close(instanceId);
+    try {
+      close(instanceId);
+    } finally {
+      instanceId = 0;
+    }
   }
 
   public static JniWrapper create(ParquetReaderOptions options) {
@@ -37,5 +41,6 @@ public class JniWrapper implements AutoCloseable {
   public native static void setRowGroupData(long instanceId, byte[] rowGroupData);
   public native static byte[] next(long instanceId);
   public native static void freeBuffer(long instanceId, long address);
+  public native static void resetBatch(long instanceId);
   public native static void close(long instanceId);
 }
