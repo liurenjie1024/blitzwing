@@ -31,6 +31,8 @@ pub enum BlitzwingErrorKind {
   InvalidArgumentError(String),
   #[fail(display = "Null pointer")]
   NullPointerError,
+  #[fail(display = "Layout error")]
+  LayoutError
 }
 
 impl BlitzwingError {
