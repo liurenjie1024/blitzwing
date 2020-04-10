@@ -1,8 +1,8 @@
 use crate::{
   error::{BlitzwingErrorKind::ArrowError, Result},
-  parquet_adapter::record_reader::RecordReader,
+  parquet_adapter::record_reader::{RecordReader, RecordReaderBuffers},
   types::ColumnDescProtoPtr,
-  util::{buffer::MutableBufferOps, num::Cast, reader::PageReaderIteratorRef},
+  util::{buffer::Buffer, num::Cast, reader::PageReaderIteratorRef},
 };
 use arrow::{
   array::{
@@ -21,12 +21,14 @@ use parquet::data_type::{
   DoubleType as ParquetDoubleType, FloatType as ParquetFloatType, Int32Type as ParquetInt32Type,
   Int64Type as ParquetInt64Type,
 };
-use std::{convert::From, marker::PhantomData, sync::Arc, vec::Vec};
+use std::{convert::From, marker::PhantomData, sync::Arc, vec::Vec, mem::size_of};
+use crate::util::buffer::{BufferManager, BooleanBufferBuilder, BufferBuilderTrait};
+
 
 pub trait ArrayReader {
   fn data_type(&self) -> &DataType;
-  fn next_batch(&mut self) -> Result<ArrayRef>;
-  fn reset_batch(&mut self) -> Result<()>;
+  fn next_batch(&mut self) -> Result<usize>;
+  fn collect(&mut self) -> Result<ArrayRef>;
 }
 
 pub(crate) type ArrayReaderRef = Box<dyn ArrayReader>;
@@ -39,8 +41,10 @@ where
 {
   arrow_data_buffer: Option<BufferBuilder<A>>,
   data_type: DataType,
-  record_reader: RecordReader<P, MutableBufferOps>,
+  record_reader: RecordReader<P, Buffer, Buffer>,
+  buffer_manager: BufferManager,
 }
+
 
 impl<A, P> PrimitiveArrayReader<A, P>
 where
@@ -53,19 +57,21 @@ where
     arrow_conversion_needed: bool,
     column_desc: ColumnDescProtoPtr,
     page_readers: PageReaderIteratorRef,
+    buffer_manager: BufferManager,
   ) -> Result<Self> {
-    let parquet_data_buffer =
-      MutableBufferOps::new(MutableBuffer::new(batch_size * P::get_type_size()));
-    let arrow_data_buffer =
-      if arrow_conversion_needed { Some(BufferBuilder::<A>::new(batch_size)) } else { None };
-    let record_reader = RecordReader::<P, MutableBufferOps>::new(
+
+    let record_reader = RecordReader::<P, Buffer, Buffer>::new(
       batch_size,
       column_desc,
-      parquet_data_buffer,
+      create_record_reader_buffers(batch_size, &buffer_manager)?,
       page_readers,
     )?;
 
-    Ok(Self { arrow_data_buffer, data_type: A::get_data_type(), record_reader })
+    let arrow_data_buffer =
+      if arrow_conversion_needed { Some(BufferBuilder::<A>::new(batch_size)) } else { None };
+
+    Ok(Self { arrow_data_buffer, 
+      data_type: A::get_data_type(), record_reader, buffer_manager })
   }
 }
 
@@ -80,36 +86,40 @@ where
     &self.data_type
   }
 
-  fn next_batch(&mut self) -> Result<ArrayRef> {
+  fn next_batch(&mut self) -> Result<usize> {
     self.record_reader.next_batch()?;
+    Ok(self.record_reader.get_num_values())
+
+  }
+
+  fn collect(&mut self) -> Result<ArrayRef> {
+    let num_values = self.record_reader.get_num_values();
+    let null_count = self.record_reader.get_null_count();
+    let buffers = self.record_reader.collect_buffers(create_record_reader_buffers(self.batch_size, &self.buffer_manager)?);
 
     let mut array_data = ArrayDataBuilder::new(A::get_data_type())
-      .len(self.record_reader.get_num_values())
-      .null_count(self.record_reader.get_null_count());
+      .len(num_values)
+      .null_count(null_count);
 
-    if self.record_reader.get_null_count() > 0 {
+    if null_count > 0 {
       array_data =
-        array_data.null_bit_buffer(unsafe { self.record_reader.get_null_bitmap().finish_shared() });
+        array_data.null_bit_buffer(unsafe { buffers.null_bitmap.finish() });
     }
 
     if let Some(arrow_builder) = &mut self.arrow_data_buffer {
-      let values: &[P::T] = self.record_reader.parquet_data().as_ref();
-      for i in 0..self.record_reader.get_num_values() {
+      let values: &[P::T] = buffers.parquet_data_buffer.as_ref();
+      for i in num_values {
         arrow_builder.append(values[i].clone().cast()).context(ArrowError)?;
       }
 
-      array_data = array_data.add_buffer(unsafe { arrow_builder.finish_shared() });
+      array_data = array_data.add_buffer(unsafe { arrow_builder.finish() });
     } else {
       array_data = array_data
-        .add_buffer(unsafe { self.record_reader.parquet_data_mut().inner_mut().freeze_shared() });
+        .add_buffer(unsafe { buffers.parquet_data_buffer });
     }
 
     let array = PrimitiveArray::<A>::from(array_data.build());
     Ok(Arc::new(array))
-  }
-
-  fn reset_batch(&mut self) -> Result<()> {
-    Ok(self.record_reader.reset_batch())
   }
 }
 
@@ -121,7 +131,7 @@ where
   arrow_data_buffer: MutableBuffer,
   arrow_offset_buffer: Int32BufferBuilder,
   data_type: DataType,
-  record_reader: RecordReader<P, Vec<P::T>>,
+  record_reader: RecordReader<P, Vec<P::T>, Buffer>,
   _phantom_arrow: PhantomData<A>,
   _phantom_parquet: PhantomData<P>,
 }
@@ -207,6 +217,18 @@ where
   fn reset_batch(&mut self) -> Result<()> {
     Ok(self.record_reader.reset_batch())
   }
+}
+
+fn create_record_reader_buffers(batch_size: usize, buffer_manager: &BufferManager) -> Result<RecordReaderBuffers<Buffer, Buffer>> {
+    let parquet_data_buffer = buffer_manager.allocate_aligned(batch_size * P::get_type_size())?;
+    let def_levels = buffer_manager.allocate_aligned(batch_size * size_of::<i16>())?;
+    let null_bitmap = BooleanBufferBuilder::new(batch_size, buffer_manager.clone())?;
+
+    Ok(RecordReaderBuffers {
+      parquet_data_buffer,
+      def_levels,
+      null_bitmap
+    })
 }
 
 pub type Int8ArrayReader = PrimitiveArrayReader<Int8Type, ParquetInt32Type>;

@@ -84,6 +84,10 @@ impl BufferData {
 
 
 impl Buffer {
+  pub(in super) fn with_capacity(capacity: usize) -> Result<Self> {
+    BufferManager::default().allocate_aligned(capacity)
+  }
+
   pub(in super) fn new(inner: BufferData, manager: BufferDataManagerRef) -> Self {
     Self {
       inner,
@@ -228,5 +232,221 @@ impl PartialEq for Buffer {
       memory::memcmp(self.inner.as_ptr(), other.inner.as_ptr(), self.len()) == 0
     }
   }
+}
+
+unsafe impl Sync for Buffer {}
+unsafe impl Send for Buffer {}
+
+#[cfg(test)]
+mod tests {
+    use arrow::util::bit_util;
+    use std::thread;
+
+    use super::*;
+    use arrow::datatypes::ToByteSlice;
+    use std::convert::TryFrom;
+    use std::sync::Arc;
+
+    #[test]
+    fn test_buffer_data_equality() {
+        let buf1 = Buffer::try_from(&[0u8, 1, 2, 3, 4] as &[u8]).expect("Failed to build buffer from array!");
+        let mut buf2 = Buffer::try_from(&[0u8, 1u8, 2, 3, 4] as &[u8]).expect("Failed to create buffer from array!");
+        assert_eq!(buf1, buf2);
+
+        // unequal because of different elements
+        buf2 = Buffer::try_from(&[0u8, 0, 2, 3, 4] as &[u8]).expect("Failed to create buffer from array");
+        assert_ne!(buf1, buf2);
+
+        // unequal because of different length
+        buf2 = Buffer::try_from(&[0u8, 1, 2, 3] as &[u8]).expect("Failed to create buffer from array!");
+        assert_ne!(buf1, buf2);
+    }
+
+    #[test]
+    fn test_from_vec() {
+        let buf = Buffer::try_from(&[0u8, 1, 2, 3, 4] as &[u8]).expect("Failed to create buffer from array") ;
+        assert_eq!(5, buf.len());
+        assert!(!buf.raw_data().is_null());
+        assert_eq!([0, 1, 2, 3, 4], <Buffer as AsRef<[u8]>>::as_ref(&buf));
+    }
+
+    #[test]
+    fn test_with_bitset() {
+        let mut buf = Buffer::with_capacity(64).expect("Failed to create buffer");
+        buf.with_bitset(64, false);
+        assert_eq!(0, bit_util::count_set_bits(buf.as_ref()));
+
+        let mut buf = Buffer::with_capacity(64).expect("Failed to create buffer");
+        buf.with_bitset(64, true);
+        assert_eq!(512, bit_util::count_set_bits(buf.as_ref()));
+
+        let mut buf = Buffer::with_capacity(64).expect("Failed to create buffer");
+        buf.set_null_bits(32, 32);
+        assert_eq!(256, bit_util::count_set_bits(buf.as_ref()));
+    }
+
+    // #[test]
+    // fn test_bitwise_and() {
+    //     let buf1 = Buffer::try_from(&[0b01101010_u8] as &[u8]).expect("Failed to build buf1");
+    //     let buf2 = Buffer::try_from(&[0b01001110_u8] as &[u8]).expect("Failed to build buf2");
+
+    //     let result_buf = Buffer::try_from(&[0b01001010_u8] as &[u8]).expect("Failed to build result buf");
+    //     assert_eq!(result_buf, (&buf1 & &buf2).unwrap());
+    // }
+
+    // #[test]
+    // fn test_bitwise_or() {
+    //     let buf1 = Buffer::from([0b01101010]);
+    //     let buf2 = Buffer::from([0b01001110]);
+    //     assert_eq!(Buffer::from([0b01101110]), (&buf1 | &buf2).unwrap());
+    // }
+
+    // #[test]
+    // fn test_bitwise_not() {
+    //     let buf = Buffer::from([0b01101010]);
+    //     assert_eq!(Buffer::from([0b10010101]), !&buf);
+    // }
+
+    // #[test]
+    // #[should_panic(expected = "Buffers must be the same size to apply Bitwise OR.")]
+    // fn test_buffer_bitand_different_sizes() {
+    //     let buf1 = Buffer::from([1_u8, 1_u8]);
+    //     let buf2 = Buffer::from([0b01001110]);
+    //     let _buf3 = (&buf1 | &buf2).unwrap();
+    // }
+
+    #[test]
+    fn test_with_capacity() {
+        let buf = Buffer::with_capacity(63).unwrap();
+        assert_eq!(64, buf.capacity());
+        assert_eq!(0, buf.len());
+        assert!(buf.is_empty());
+    }
+
+    // #[test]
+    // fn test_mutable_write() {
+    //     let mut buf = MutableBuffer::new(100);
+    //     buf.write("hello".as_bytes()).expect("Ok");
+    //     assert_eq!(5, buf.len());
+    //     assert_eq!("hello".as_bytes(), buf.data());
+
+    //     buf.write(" world".as_bytes()).expect("Ok");
+    //     assert_eq!(11, buf.len());
+    //     assert_eq!("hello world".as_bytes(), buf.data());
+
+    //     buf.clear();
+    //     assert_eq!(0, buf.len());
+    //     buf.write("hello arrow".as_bytes()).expect("Ok");
+    //     assert_eq!(11, buf.len());
+    //     assert_eq!("hello arrow".as_bytes(), buf.data());
+    // }
+
+    // #[test]
+    // #[should_panic(expected = "Buffer not big enough")]
+    // fn test_mutable_write_overflow() {
+    //     let mut buf = MutableBuffer::new(1);
+    //     assert_eq!(64, buf.capacity());
+    //     for _ in 0..10 {
+    //         buf.write(&[0, 0, 0, 0, 0, 0, 0, 0]).unwrap();
+    //     }
+    // }
+
+    #[test]
+    fn test_reserve() {
+        let mut buf = Buffer::with_capacity(1).unwrap();
+        assert_eq!(64, buf.capacity());
+
+        // Reserving a smaller capacity should have no effect.
+        let mut new_cap = buf.reserve(10).expect("reserve should be OK");
+        assert_eq!(64, new_cap);
+        assert_eq!(64, buf.capacity());
+
+        new_cap = buf.reserve(100).expect("reserve should be OK");
+        assert_eq!(128, new_cap);
+        assert_eq!(128, buf.capacity());
+    }
+
+    #[test]
+    fn test_mutable_resize() {
+        let mut buf = Buffer::with_capacity(1).unwrap();
+        assert_eq!(64, buf.capacity());
+        assert_eq!(0, buf.len());
+
+        buf.resize(20).expect("resize should be OK");
+        assert_eq!(64, buf.capacity());
+        assert_eq!(20, buf.len());
+
+        buf.resize(10).expect("resize should be OK");
+        assert_eq!(64, buf.capacity());
+        assert_eq!(10, buf.len());
+
+        buf.resize(100).expect("resize should be OK");
+        assert_eq!(128, buf.capacity());
+        assert_eq!(100, buf.len());
+
+        buf.resize(30).expect("resize should be OK");
+        assert_eq!(64, buf.capacity());
+        assert_eq!(30, buf.len());
+
+        buf.resize(0).expect("resize should be OK");
+        assert_eq!(0, buf.capacity());
+        assert_eq!(0, buf.len());
+    }
+
+    // #[test]
+    // fn test_equal() -> Result<()> {
+    //     let mut buf = MutableBuffer::new(1);
+    //     let mut buf2 = MutableBuffer::new(1);
+
+    //     buf.write(&[0xaa])?;
+    //     buf2.write(&[0xaa, 0xbb])?;
+    //     assert!(buf != buf2);
+
+    //     buf.write(&[0xbb])?;
+    //     assert_eq!(buf, buf2);
+
+    //     buf2.reserve(65)?;
+    //     assert!(buf != buf2);
+
+    //     Ok(())
+    // }
+
+    #[test]
+    fn test_access_concurrently() {
+        let buffer = Arc::new(Buffer::try_from(vec![1u8, 2, 3, 4, 5].as_slice()).unwrap());
+        let buffer2 = buffer.clone();
+        assert_eq!(&[1u8, 2, 3, 4, 5] as &[u8], <Buffer as AsRef<[u8]>>::as_ref(buffer.as_ref()));
+
+        let buffer_copy = thread::spawn(move || {
+            // access buffer in another thread.
+            buffer.clone()
+        })
+        .join();
+
+        assert!(buffer_copy.is_ok());
+        assert_eq!(buffer2, buffer_copy.ok().unwrap());
+    }
+
+    macro_rules! check_as_typed_data {
+        ($input: expr, $native_t: ty) => {{
+            let buffer = Buffer::try_from($input.to_byte_slice()).unwrap();
+            let slice: &[$native_t] = buffer.as_ref();
+            assert_eq!($input, slice);
+        }};
+    }
+
+    #[test]
+    fn test_as_typed_data() {
+        check_as_typed_data!(&[1i8, 3i8, 6i8], i8);
+        check_as_typed_data!(&[1u8, 3u8, 6u8], u8);
+        check_as_typed_data!(&[1i16, 3i16, 6i16], i16);
+        check_as_typed_data!(&[1i32, 3i32, 6i32], i32);
+        check_as_typed_data!(&[1i64, 3i64, 6i64], i64);
+        check_as_typed_data!(&[1u16, 3u16, 6u16], u16);
+        check_as_typed_data!(&[1u32, 3u32, 6u32], u32);
+        check_as_typed_data!(&[1u64, 3u64, 6u64], u64);
+        check_as_typed_data!(&[1f32, 3f32, 6f32], f32);
+        check_as_typed_data!(&[1f64, 3f64, 6f64], f64);
+    }
 }
 

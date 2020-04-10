@@ -69,3 +69,4 @@ pub trait Manager {
 #[derive(Default)]
 pub(crate) struct RootManager {}
 impl Manager for RootManager {}
+
