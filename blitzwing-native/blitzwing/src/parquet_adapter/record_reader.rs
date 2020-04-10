@@ -6,7 +6,7 @@ use crate::{
   types::ColumnDescProtoPtr,
   util::reader::{PageReaderIteratorRef, PageReaderRef},
 };
-use crate::util::buffer::{BooleanBufferBuilder, BufferBuilderTrait};
+use crate::util::buffer::BooleanBufferBuilder;
 use failure::ResultExt;
 use parquet::{
   basic::Encoding,
@@ -124,11 +124,11 @@ where
             break;
           }
 
-          let is_empty = self.def_levels[cur_idx] >= self.max_def_level();
+          let is_empty = self.buffers.def_levels.as_mut()[cur_idx] >= self.max_def_level();
 
           let mut end_idx_tmp = cur_idx + 1;
           while end_idx_tmp < end_idx
-            && ((self.def_levels[end_idx_tmp] >= self.max_def_level()) == is_empty)
+            && ((self.buffers.def_levels.as_mut()[end_idx_tmp] >= self.max_def_level()) == is_empty)
           {
             end_idx_tmp += 1;
           }
@@ -331,7 +331,7 @@ where
 
     Ok(
       level_decoder
-        .get(&mut self.def_levels[self.num_values..(self.num_values + num)])
+        .get(&mut self.buffers.def_levels.as_mut()[self.num_values..(self.num_values + num)])
         .context(ParquetError)?,
     )
   }
@@ -344,7 +344,7 @@ where
       .get_mut(&encoding)
       .expect(format!("decoder for encoding {} should be set", encoding).as_str());
 
-    let buffer = &mut self.parquet_data_buffer.as_mut()[start..end];
+    let buffer = &mut self.buffers.parquet_data_buffer.as_mut()[start..end];
 
     Ok(current_decoder.get(buffer).context(ParquetError)?)
   }

@@ -12,6 +12,7 @@ use super::manager::{RootManager, BufferManager};
 use std::default::Default;
 use std::convert::TryFrom;
 use std::fmt::{Debug, Formatter};
+use std::io::{Write, Result as IoResult, Error as IoError, ErrorKind};
 
 #[derive(Clone)]
 pub struct BufferData {
@@ -231,6 +232,24 @@ impl PartialEq for Buffer {
     unsafe {
       memory::memcmp(self.inner.as_ptr(), other.inner.as_ptr(), self.len()) == 0
     }
+  }
+}
+
+impl Write for Buffer {
+  fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
+      let remaining_capacity = self.capacity() - self.len();
+      if buf.len() > remaining_capacity {
+          return Err(IoError::new(ErrorKind::Other, "Buffer not big enough"));
+      }
+      unsafe {
+          memory::memcpy(self.inner.ptr.offset(self.len() as isize), buf.as_ptr(), buf.len());
+          self.inner.len += buf.len();
+          Ok(buf.len())
+      }
+  }
+
+  fn flush(&mut self) -> IoResult<()> {
+      Ok(())
   }
 }
 

@@ -6,8 +6,7 @@ use crate::{
 };
 use arrow::{
   array::{
-    Array, ArrayDataBuilder, ArrayDataRef, ArrayRef, BinaryArray, BufferBuilder,
-    BufferBuilderTrait, Int32BufferBuilder, PrimitiveArray, StringArray,
+    Array, ArrayDataBuilder, ArrayDataRef, ArrayRef, BinaryArray, BufferBuilder, Int32BufferBuilder, PrimitiveArray, StringArray,
   },
   buffer::MutableBuffer,
   datatypes::{
@@ -43,6 +42,7 @@ where
   data_type: DataType,
   record_reader: RecordReader<P, Buffer, Buffer>,
   buffer_manager: BufferManager,
+  batch_size: usize,
 }
 
 
@@ -63,7 +63,7 @@ where
     let record_reader = RecordReader::<P, Buffer, Buffer>::new(
       batch_size,
       column_desc,
-      create_record_reader_buffers(batch_size, &buffer_manager)?,
+      create_record_reader_buffers(batch_size, &buffer_manager, || buffer_manager.allocate_aligned(batch_size))?,
       page_readers,
     )?;
 
@@ -71,7 +71,7 @@ where
       if arrow_conversion_needed { Some(BufferBuilder::<A>::new(batch_size)) } else { None };
 
     Ok(Self { arrow_data_buffer, 
-      data_type: A::get_data_type(), record_reader, buffer_manager })
+      data_type: A::get_data_type(), record_reader, buffer_manager, batch_size })
   }
 }
 
@@ -89,13 +89,12 @@ where
   fn next_batch(&mut self) -> Result<usize> {
     self.record_reader.next_batch()?;
     Ok(self.record_reader.get_num_values())
-
   }
 
   fn collect(&mut self) -> Result<ArrayRef> {
     let num_values = self.record_reader.get_num_values();
     let null_count = self.record_reader.get_null_count();
-    let buffers = self.record_reader.collect_buffers(create_record_reader_buffers(self.batch_size, &self.buffer_manager)?);
+    let buffers = self.record_reader.collect_buffers(create_record_reader_buffers(self.batch_size, &self.buffer_manager, || self.buffer_manager.allocate_aligned(self.batch_size))?);
 
     let mut array_data = ArrayDataBuilder::new(A::get_data_type())
       .len(num_values)
@@ -128,10 +127,12 @@ where
   A: From<ArrayDataRef> + Array + 'static,
   P: ParquetType,
 {
-  arrow_data_buffer: MutableBuffer,
+  arrow_data_buffer: Buffer,
   arrow_offset_buffer: Int32BufferBuilder,
   data_type: DataType,
   record_reader: RecordReader<P, Vec<P::T>, Buffer>,
+  buffer_manager: BufferManager,
+  batch_size: usize,
   _phantom_arrow: PhantomData<A>,
   _phantom_parquet: PhantomData<P>,
 }
@@ -146,16 +147,20 @@ where
     column_desc: ColumnDescProtoPtr,
     data_type: DataType,
     page_readers: PageReaderIteratorRef,
+    buffer_manager: BufferManager,
   ) -> Result<Self> {
-    let mut parquet_data_buffer = Vec::with_capacity(batch_size);
-    parquet_data_buffer.resize_with(batch_size, P::T::default);
+    let record_reader_buffers = create_record_reader_buffers(batch_size, &buffer_manager, || {
+      let buffer = Vec::<P::T>::with_capacity(batch_size);
+      buffer.resize_with(batch_size, P::T::default);
+      Ok(buffer)
+    })?;
 
-    let arrow_data_buffer = MutableBuffer::new(batch_size);
+    let arrow_data_buffer = buffer_manager.allocate_aligned(batch_size)?;
     let arrow_offset_buffer = Int32BufferBuilder::new(batch_size + 1);
-    let record_reader = RecordReader::<P, Vec<P::T>>::new(
+    let record_reader = RecordReader::<P, Vec<P::T>, Buffer>::new(
       batch_size,
       column_desc,
-      parquet_data_buffer,
+      record_reader_buffers,
       page_readers,
     )?;
 
@@ -164,6 +169,8 @@ where
       arrow_offset_buffer,
       data_type,
       record_reader,
+      buffer_manager,
+      batch_size,
       _phantom_arrow: PhantomData,
       _phantom_parquet: PhantomData,
     })
@@ -179,17 +186,24 @@ where
     &self.data_type
   }
 
-  fn next_batch(&mut self) -> Result<ArrayRef> {
+  fn next_batch(&mut self) -> Result<usize> {
     self.record_reader.next_batch()?;
+    Ok(self.record_reader.get_num_values())
+  }
 
+  fn collect(&mut self) -> Result<ArrayRef> {
     let values_read = self.record_reader.get_num_values();
     let null_count = self.record_reader.get_null_count();
-    let parquet_data_buffer = self.record_reader.parquet_data();
+    let buffers = self.record_reader.collect_buffers(create_record_reader_buffers(self.batch_size, &self.buffer_manager, || {
+      let buffer = Vec::<P::T>::with_capacity(self.batch_size);
+      buffer.resize_with(self.batch_size, P::T::default);
+      Ok(buffer)
+    })?);
 
     let mut array_data =
       ArrayDataBuilder::new(self.data_type.clone()).len(values_read).null_count(null_count);
 
-    let data_len = (&parquet_data_buffer[0..values_read]).iter().map(|b| b.len()).sum();
+    let data_len = (&buffers.parquet_data_buffer[0..values_read]).iter().map(|b| b.len()).sum();
     self.arrow_data_buffer.resize(data_len).context(ArrowError)?;
 
     let mut start: usize = 0;
@@ -203,8 +217,8 @@ where
     }
 
     array_data = array_data
-      .add_buffer(unsafe { self.arrow_offset_buffer.finish_shared() })
-      .add_buffer(unsafe { self.arrow_data_buffer.freeze_shared() });
+      .add_buffer(unsafe { self.arrow_offset_buffer.finish() })
+      .add_buffer(unsafe { self.arrow_data_buffer.freeze() });
 
     if null_count > 0 {
       array_data =
@@ -213,14 +227,13 @@ where
 
     Ok(Arc::new(A::from(array_data.build())))
   }
-
-  fn reset_batch(&mut self) -> Result<()> {
-    Ok(self.record_reader.reset_batch())
-  }
 }
 
-fn create_record_reader_buffers(batch_size: usize, buffer_manager: &BufferManager) -> Result<RecordReaderBuffers<Buffer, Buffer>> {
-    let parquet_data_buffer = buffer_manager.allocate_aligned(batch_size * P::get_type_size())?;
+fn create_record_reader_buffers<P, F, B>(batch_size: usize, buffer_manager: &BufferManager, func: F) -> Result<RecordReaderBuffers<B, Buffer>> 
+where P: ParquetType,
+F: FnOnce() -> Result<B>,
+{
+    let parquet_data_buffer = func()?;
     let def_levels = buffer_manager.allocate_aligned(batch_size * size_of::<i16>())?;
     let null_bitmap = BooleanBufferBuilder::new(batch_size, buffer_manager.clone())?;
 
@@ -230,6 +243,7 @@ fn create_record_reader_buffers(batch_size: usize, buffer_manager: &BufferManage
       null_bitmap
     })
 }
+
 
 pub type Int8ArrayReader = PrimitiveArrayReader<Int8Type, ParquetInt32Type>;
 pub type Int16ArrayReader = PrimitiveArrayReader<Int16Type, ParquetInt32Type>;

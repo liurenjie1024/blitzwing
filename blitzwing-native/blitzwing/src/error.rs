@@ -32,7 +32,9 @@ pub enum BlitzwingErrorKind {
   #[fail(display = "Null pointer")]
   NullPointerError,
   #[fail(display = "Layout error")]
-  LayoutError
+  LayoutError,
+  #[fail(display = "IO error")]
+  IoError,
 }
 
 impl BlitzwingError {
