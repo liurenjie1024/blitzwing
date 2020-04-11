@@ -34,6 +34,14 @@ impl Default for BufferManager {
   }
 }
 
+impl BufferManager {
+  pub(crate) fn new(inner: BufferDataManagerRef) -> Self {
+    Self {
+      inner
+    }
+  }
+}
+
 pub trait Manager {
   fn allocate(&self, layout: Layout) -> Result<BufferData> {
     if layout.align() != ALIGNMENT {
@@ -70,3 +78,15 @@ pub trait Manager {
 pub(crate) struct RootManager {}
 impl Manager for RootManager {}
 
+pub(crate) struct CachedManager {
+  root: BufferDataManagerRef
+}
+
+impl CachedManager {
+  pub(crate) fn new(root: BufferDataManagerRef) -> Self {
+    Self {
+      root
+    }
+  }
+}
+impl Manager for CachedManager {}

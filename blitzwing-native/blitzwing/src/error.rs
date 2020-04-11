@@ -35,6 +35,8 @@ pub enum BlitzwingErrorKind {
   LayoutError,
   #[fail(display = "IO error")]
   IoError,
+  #[fail(display = "Illegal state: {}", _0)]
+  IllegalStateError(String),
 }
 
 impl BlitzwingError {

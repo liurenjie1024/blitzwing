@@ -1,6 +1,7 @@
 pub(crate) mod manager;
 pub(crate) mod buffer;
 pub(crate) mod builder;
+pub(crate) mod ops;
 
 pub(crate) use buffer::Buffer;
 pub(crate) use manager::BufferManager;

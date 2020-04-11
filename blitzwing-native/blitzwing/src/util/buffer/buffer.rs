@@ -13,8 +13,9 @@ use std::default::Default;
 use std::convert::TryFrom;
 use std::fmt::{Debug, Formatter};
 use std::io::{Write, Result as IoResult, Error as IoError, ErrorKind};
+use arrow::buffer::{Buffer as ArrowBuffer};
 
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq, Hash)]
 pub struct BufferData {
   ptr: *mut u8,
   len: usize,
@@ -66,11 +67,19 @@ impl Debug for Buffer {
 }
 
 impl BufferData {
-  pub(in super) fn new(ptr: *mut u8, size: usize) -> Self {
+  pub(crate) fn new(ptr: *mut u8, size: usize) -> Self {
     Self {
       ptr,
       len: 0,
       capacity: size
+    }
+  }
+
+  pub(crate) fn from_arrow_buffer_without_len(arrow_buffer: &ArrowBuffer) -> Self {
+    Self {
+      ptr: arrow_buffer.raw_data() as *mut u8,
+      len: 0,
+      capacity: arrow_buffer.capacity()
     }
   }
 
@@ -82,7 +91,6 @@ impl BufferData {
     self.capacity
   }
 }
-
 
 impl Buffer {
   pub(in super) fn with_capacity(capacity: usize) -> Result<Self> {
@@ -111,6 +119,12 @@ impl Buffer {
   pub(crate) fn is_empty(&self) -> bool {
     self.len() == 0
   }
+
+  pub(crate) fn to_arrow_buffer(self) -> ArrowBuffer {
+    ArrowBuffer::from_unowned(self.inner.ptr, self.len(), self.capacity())
+  }
+
+
 
   /// Set the bits in the range of `[0, end)` to 0 (if `val` is false), or 1 (if `val`
     /// is true). Also extend the length of this buffer to be `end`.

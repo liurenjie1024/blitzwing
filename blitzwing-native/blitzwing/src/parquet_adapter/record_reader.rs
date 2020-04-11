@@ -25,10 +25,10 @@ pub(in super) struct RecordReaderBuffers<P, D> {
 }
 
 pub struct RecordReader<T, B, D>
-where
-  T: ParquetType,
-  B: AsMut<[T::T]>,
-  D: AsMut<[i16]>,
+// where
+//   T: ParquetType,
+//   B: AsMut<[T::T]>,
+//   D: AsMut<[i16]>,
 {
   batch_size: usize,
   column_desc: ColumnDescProtoPtr,
