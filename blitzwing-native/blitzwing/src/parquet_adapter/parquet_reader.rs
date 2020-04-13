@@ -12,7 +12,6 @@ use crate::{
   },
 };
 use arrow::{
-  array::ArrayRef,
   datatypes::{DataType, SchemaRef},
   ipc::convert::schema_from_bytes,
   record_batch::RecordBatch,
@@ -182,6 +181,7 @@ pub(crate) fn create_parquet_reader(meta: ParquetReaderProto) -> Result<ParquetR
     }
   }
 
+  let buffers = HashMap::with_capacity(columns.len() * 3);
   Ok(ParquetReader { schema: Arc::new(schema), columns, meta, 
-    buffers: HashMap::with_capacity(columns.len() * 3), root_buffer_manager: root_manager })
+    buffers, root_buffer_manager: root_manager })
 }

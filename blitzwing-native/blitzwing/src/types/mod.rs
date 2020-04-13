@@ -45,9 +45,9 @@ impl TryFrom<CompressionProto> for Compression {
   }
 }
 
-impl<'a> TryFrom<&'a RecordBatch> for JniRecordBatchProto {
+impl TryFrom<RecordBatch> for JniRecordBatchProto {
   type Error = BlitzwingError;
-  fn try_from(record_batch: &'a RecordBatch) -> Result<Self> {
+  fn try_from(record_batch: RecordBatch) -> Result<Self> {
     let mut jni_record_batch = JniRecordBatchProto::new();
     jni_record_batch.set_length(record_batch.num_rows() as i32);
     for i in 0..record_batch.num_columns() {

@@ -1,6 +1,5 @@
 use arrow::{
   buffer::Buffer,
-  datatypes::ArrowNativeType,
 };
 
 pub(crate) struct BufferOps {

@@ -9,7 +9,7 @@ use crate::{
 };
 use jni::{
   objects::JClass,
-  sys::{jbyteArray, jlong},
+  sys::{jbyteArray, jlong, jint},
   JNIEnv,
 };
 use std::{
@@ -54,10 +54,26 @@ pub extern "system" fn Java_com_ebay_hadoop_blitzwing_arrow_adaptor_parquet_JniW
   env: JNIEnv<'a>,
   _klass: JClass,
   parquet_reader_id: jlong,
+) -> jlong {
+  let call_inner = || -> Result<jlong> {
+    let mut wrapper = JniWrapper::<'a, ParquetReader>::new(env.clone(), parquet_reader_id)?;
+    wrapper.inner_mut().next_batch()
+      .map(|len| len as jlong)
+  };
+
+  // TODO: Remember to free buffer
+  call_inner().map_err(|e| throw_exception(env.clone(), e)).map_or(0, identity)
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_ebay_hadoop_blitzwing_arrow_adaptor_parquet_JniWrapper_collect<'a>(
+  env: JNIEnv<'a>,
+  _klass: JClass,
+  parquet_reader_id: jlong
 ) -> jbyteArray {
   let call_inner = || -> Result<jbyteArray> {
     let mut wrapper = JniWrapper::<'a, ParquetReader>::new(env.clone(), parquet_reader_id)?;
-    serialize(env.clone(), JniRecordBatchProto::try_from(wrapper.inner_mut().next_batch()?)?)
+    serialize(env.clone(), JniRecordBatchProto::try_from(wrapper.inner_mut().collect()?)?)
   };
 
   // TODO: Remember to free buffer
@@ -72,10 +88,11 @@ pub extern "system" fn Java_com_ebay_hadoop_blitzwing_arrow_adaptor_parquet_JniW
   _klass: JClass,
   parquet_reader_id: jlong,
   buffer_id: jlong,
+  len: jint
 ) {
   let call_inner = || -> Result<()> {
     let mut wrapper = JniWrapper::<'a, ParquetReader>::new(env.clone(), parquet_reader_id)?;
-    unsafe { wrapper.inner_mut().free_buffer(transmute(buffer_id)) }
+    unsafe { wrapper.inner_mut().free_buffer(transmute(buffer_id), len as usize) }
   };
 
   call_inner().map_err(|e| throw_exception(env, e)).map_or_else(identity, identity)

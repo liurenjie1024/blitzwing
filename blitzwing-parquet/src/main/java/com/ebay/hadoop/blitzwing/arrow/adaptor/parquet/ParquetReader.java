@@ -39,16 +39,12 @@ public class ParquetReader extends ArrowReader implements MemoryManager, Iterato
 
   @Override
   public boolean loadNextBatch() throws IOException {
-    JniRecordBatchProto recordBatchProto = null;
-    int curBatchLength = 0;
+    long totalLen = 0;
 
     while(true) {
-      recordBatchProto = jni.next();
-      curBatchLength = Optional.ofNullable(recordBatchProto)
-          .map(JniRecordBatchProto::getLength)
-          .orElse(0);
+      totalLen += jni.next();
 
-      if (curBatchLength < options.getBatchSize()) {
+      if (totalLen < options.getBatchSize()) {
         if (!rawChunkStores.hasNext()) {
           break;
         }
@@ -59,11 +55,11 @@ public class ParquetReader extends ArrowReader implements MemoryManager, Iterato
       }
     }
 
-    if (curBatchLength == 0) {
+    if (totalLen == 0) {
       return false;
     }
 
-    loadRecordBatch(RecordBatch.build(recordBatchProto, this));
+    loadRecordBatch(RecordBatch.build(jni.collect(), this));
     return true;
   }
 
@@ -109,8 +105,8 @@ public class ParquetReader extends ArrowReader implements MemoryManager, Iterato
   }
 
   @Override
-  public void freeBuffer(long memoryAddress, long length) {
-    jni.freeBuffer(memoryAddress);
+  public void freeBuffer(long memoryAddress, int length) {
+    jni.freeBuffer(memoryAddress, length);
   }
 
   @Override

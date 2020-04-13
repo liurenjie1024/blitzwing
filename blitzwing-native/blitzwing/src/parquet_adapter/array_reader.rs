@@ -94,7 +94,7 @@ where
   fn collect(&mut self) -> Result<ArrayRef> {
     let num_values = self.record_reader.get_num_values();
     let null_count = self.record_reader.get_null_count();
-    let buffers = self.record_reader.collect_buffers(create_record_reader_buffers::<P, _, Buffer>(self.batch_size, &self.buffer_manager, || self.buffer_manager.allocate_aligned(self.batch_size))?);
+    let mut buffers = self.record_reader.collect_buffers(create_record_reader_buffers::<P, _, Buffer>(self.batch_size, &self.buffer_manager, || self.buffer_manager.allocate_aligned(self.batch_size))?);
 
     let mut array_data = ArrayDataBuilder::new(A::get_data_type())
       .len(num_values)
@@ -102,7 +102,9 @@ where
 
     if null_count > 0 {
       array_data =
-        array_data.null_bit_buffer(unsafe { buffers.null_bitmap.finish().to_arrow_buffer() });
+        array_data.null_bit_buffer( unsafe {
+          buffers.null_bitmap.finish().to_arrow_buffer()
+        } );
     }
 
     if let Some(arrow_builder) = &mut self.arrow_data_buffer {
@@ -111,10 +113,13 @@ where
         arrow_builder.append(values[i].clone().cast()).context(ArrowError)?;
       }
 
-      array_data = array_data.add_buffer(unsafe { arrow_builder.finish().to_arrow_buffer() });
+      array_data = array_data.add_buffer( 
+        unsafe {
+          arrow_builder.finish().to_arrow_buffer()
+        });
     } else {
       array_data = array_data
-        .add_buffer(unsafe { buffers.parquet_data_buffer.to_arrow_buffer() });
+        .add_buffer( unsafe { buffers.parquet_data_buffer.to_arrow_buffer() });
     }
 
     let array = PrimitiveArray::<A>::from(array_data.build());
@@ -150,7 +155,7 @@ where
     buffer_manager: BufferManager,
   ) -> Result<Self> {
     let record_reader_buffers = create_record_reader_buffers::<P, _, _>(batch_size, &buffer_manager, || {
-      let buffer = Vec::<P::T>::with_capacity(batch_size);
+      let mut buffer = Vec::<P::T>::with_capacity(batch_size);
       buffer.resize_with(batch_size, P::T::default);
       Ok(buffer)
     })?;
@@ -194,8 +199,8 @@ where
   fn collect(&mut self) -> Result<ArrayRef> {
     let values_read = self.record_reader.get_num_values();
     let null_count = self.record_reader.get_null_count();
-    let buffers = self.record_reader.collect_buffers(create_record_reader_buffers::<P, _, _>(self.batch_size, &self.buffer_manager, || {
-      let buffer = Vec::<P::T>::with_capacity(self.batch_size);
+    let mut buffers = self.record_reader.collect_buffers(create_record_reader_buffers::<P, _, _>(self.batch_size, &self.buffer_manager, || {
+      let mut buffer = Vec::<P::T>::with_capacity(self.batch_size);
       buffer.resize_with(self.batch_size, P::T::default);
       Ok(buffer)
     })?);

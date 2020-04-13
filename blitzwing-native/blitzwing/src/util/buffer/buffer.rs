@@ -120,8 +120,11 @@ impl Buffer {
     self.len() == 0
   }
 
-  pub(crate) fn to_arrow_buffer(self) -> ArrowBuffer {
-    ArrowBuffer::from_unowned(self.inner.ptr, self.len(), self.capacity())
+  pub(crate) unsafe fn to_arrow_buffer(&mut self) -> ArrowBuffer {
+      let arrow_buffer = ArrowBuffer::from_unowned(self.inner.ptr, self.len(), self.capacity());
+      self.inner = BufferData::default();
+
+      arrow_buffer
   }
 
 

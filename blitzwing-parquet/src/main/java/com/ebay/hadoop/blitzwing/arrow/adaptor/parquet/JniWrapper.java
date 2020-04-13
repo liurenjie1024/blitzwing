@@ -16,12 +16,16 @@ public class JniWrapper implements AutoCloseable {
     setRowGroupData(instanceId, serializedData);
   }
 
-  public JniRecordBatchProto next() throws InvalidProtocolBufferException {
-    return JniRecordBatchProto.parseFrom(next(instanceId));
+  public long next() {
+    return next(instanceId);
   }
 
-  public void freeBuffer(long address) {
-    freeBuffer(instanceId, address);
+  public JniRecordBatchProto collect() throws InvalidProtocolBufferException {
+    return JniRecordBatchProto.parseFrom(collect(instanceId));
+  }
+
+  public void freeBuffer(long address, int length) {
+    freeBuffer(instanceId, address, length);
   }
 
   @Override
@@ -39,8 +43,8 @@ public class JniWrapper implements AutoCloseable {
 
   public native static long newInstance(byte[] parquetReaderProto);
   public native static void setRowGroupData(long instanceId, byte[] rowGroupData);
-  public native static byte[] next(long instanceId);
-  public native static void freeBuffer(long instanceId, long address);
-  public native static void resetBatch(long instanceId);
+  public native static long next(long instanceId);
+  public native static byte[] collect(long instanceId);
+  public native static void freeBuffer(long instanceId, long address, int length);
   public native static void close(long instanceId);
 }

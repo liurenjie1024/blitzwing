@@ -18,7 +18,7 @@ use parquet::{
 };
 use std::{cmp::min, collections::HashMap, marker::PhantomData, mem::replace};
 
-pub(in super) struct RecordReaderBuffers<P, D> {
+pub(crate) struct RecordReaderBuffers<P, D> {
   pub(in super) parquet_data_buffer: P,
   pub(in super) def_levels: D,
   pub(in super) null_bitmap: BooleanBufferBuilder,
@@ -64,7 +64,7 @@ where
   pub(crate) fn new(
     batch_size: usize,
     column_desc: ColumnDescProtoPtr,
-    buffers: RecordReaderBuffers<B, D>,
+    mut buffers: RecordReaderBuffers<B, D>,
     page_readers: PageReaderIteratorRef,
   ) -> Result<Self> {
     if column_desc.get_max_def_level() > 0 && buffers.def_levels.as_mut().len() != batch_size {
