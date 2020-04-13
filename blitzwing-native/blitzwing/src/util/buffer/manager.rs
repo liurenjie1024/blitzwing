@@ -1,16 +1,16 @@
-use std::sync::Arc;
-use std::alloc::Layout;
-use crate::error::Result;
 use super::buffer::{Buffer, BufferData};
-use arrow::{memory, memory::ALIGNMENT};
-use arrow::util::bit_util;
-use crate::error::BlitzwingErrorKind::{InvalidArgumentError, MemoryError, LayoutError};
+use crate::error::{
+  BlitzwingErrorKind::{InvalidArgumentError, LayoutError, MemoryError},
+  Result,
+};
+use arrow::{memory, memory::ALIGNMENT, util::bit_util};
 use failure::ResultExt;
+use std::{alloc::Layout, sync::Arc};
 
 pub type BufferDataManagerRef = Arc<dyn Manager>;
 #[derive(Clone)]
 pub struct BufferManager {
-  inner: BufferDataManagerRef 
+  inner: BufferDataManagerRef,
 }
 
 impl BufferManager {
@@ -20,25 +20,19 @@ impl BufferManager {
   }
 
   pub fn allocate_aligned(&self, capacity: usize) -> Result<Buffer> {
-    unsafe {
-      self.allocate(Layout::from_size_align_unchecked(capacity, ALIGNMENT))
-    }
+    unsafe { self.allocate(Layout::from_size_align_unchecked(capacity, ALIGNMENT)) }
   }
 }
 
 impl Default for BufferManager {
   fn default() -> Self {
-    Self {
-      inner: Arc::new(RootManager::default())
-    }
+    Self { inner: Arc::new(RootManager::default()) }
   }
 }
 
 impl BufferManager {
   pub(crate) fn new(inner: BufferDataManagerRef) -> Self {
-    Self {
-      inner
-    }
+    Self { inner }
   }
 }
 
@@ -52,16 +46,16 @@ pub trait Manager {
     let ptr = memory::allocate_aligned(new_capacity);
 
     if ptr.is_null() {
-      return Err(MemoryError(Layout::from_size_align(new_capacity, ALIGNMENT).context(LayoutError)?))?;
+      return Err(MemoryError(
+        Layout::from_size_align(new_capacity, ALIGNMENT).context(LayoutError)?,
+      ))?;
     }
 
     Ok(BufferData::new(ptr, new_capacity))
   }
 
   fn allocate_aligned(&self, capacity: usize) -> Result<BufferData> {
-    unsafe {
-      self.allocate(Layout::from_size_align_unchecked(capacity, ALIGNMENT))
-    }
+    unsafe { self.allocate(Layout::from_size_align_unchecked(capacity, ALIGNMENT)) }
   }
 
   fn deallocate(&self, buffer: &BufferData) -> Result<()> {
@@ -79,14 +73,12 @@ pub(crate) struct RootManager {}
 impl Manager for RootManager {}
 
 pub(crate) struct CachedManager {
-  root: BufferDataManagerRef
+  root: BufferDataManagerRef,
 }
 
 impl CachedManager {
   pub(crate) fn new(root: BufferDataManagerRef) -> Self {
-    Self {
-      root
-    }
+    Self { root }
   }
 }
 impl Manager for CachedManager {}

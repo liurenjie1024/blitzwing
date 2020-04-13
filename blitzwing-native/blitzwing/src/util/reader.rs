@@ -1,10 +1,9 @@
 use crate::{
   error::{BlitzwingError, BlitzwingErrorKind::ParquetError, Result},
   proto::parquet::{ColumnChunkProto, ColumnDescProto, SegmentProto},
-  util::TryIterator,
+  util::{buffer::ops::BufferOps, TryIterator},
 };
 use arrow::buffer::Buffer;
-use crate::util::buffer::ops::BufferOps;
 use failure::ResultExt;
 use parquet::{column::page::PageReader, file::reader::SerializedPageReader};
 use std::{

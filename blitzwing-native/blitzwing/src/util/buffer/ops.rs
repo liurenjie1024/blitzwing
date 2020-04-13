@@ -1,6 +1,4 @@
-use arrow::{
-  buffer::Buffer,
-};
+use arrow::buffer::Buffer;
 
 pub(crate) struct BufferOps {
   inner: Buffer,

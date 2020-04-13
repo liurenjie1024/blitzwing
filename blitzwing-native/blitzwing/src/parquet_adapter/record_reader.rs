@@ -1,12 +1,14 @@
 use crate::{
   error::{
-    BlitzwingErrorKind::{FatalError, ParquetError, InvalidArgumentError},
+    BlitzwingErrorKind::{FatalError, InvalidArgumentError, ParquetError},
     Result,
   },
   types::ColumnDescProtoPtr,
-  util::reader::{PageReaderIteratorRef, PageReaderRef},
+  util::{
+    buffer::BooleanBufferBuilder,
+    reader::{PageReaderIteratorRef, PageReaderRef},
+  },
 };
-use crate::util::buffer::BooleanBufferBuilder;
 use failure::ResultExt;
 use parquet::{
   basic::Encoding,
@@ -19,9 +21,9 @@ use parquet::{
 use std::{cmp::min, collections::HashMap, marker::PhantomData, mem::replace};
 
 pub(crate) struct RecordReaderBuffers<P, D> {
-  pub(in super) parquet_data_buffer: P,
-  pub(in super) def_levels: D,
-  pub(in super) null_bitmap: BooleanBufferBuilder,
+  pub(super) parquet_data_buffer: P,
+  pub(super) def_levels: D,
+  pub(super) null_bitmap: BooleanBufferBuilder,
 }
 
 pub struct RecordReader<T, B, D>
@@ -68,7 +70,11 @@ where
     page_readers: PageReaderIteratorRef,
   ) -> Result<Self> {
     if column_desc.get_max_def_level() > 0 && buffers.def_levels.as_mut().len() != batch_size {
-      return Err(InvalidArgumentError(format!("Def level buffer size({}) not match batch size({})",  buffers.def_levels.as_mut().len(), batch_size)))?;
+      return Err(InvalidArgumentError(format!(
+        "Def level buffer size({}) not match batch size({})",
+        buffers.def_levels.as_mut().len(),
+        batch_size
+      )))?;
     }
 
     Ok(Self {
@@ -162,7 +168,10 @@ where
     self.num_values
   }
 
-  pub(crate) fn collect_buffers(&mut self, new_buffer: RecordReaderBuffers<B, D>) -> RecordReaderBuffers<B, D> {
+  pub(crate) fn collect_buffers(
+    &mut self,
+    new_buffer: RecordReaderBuffers<B, D>,
+  ) -> RecordReaderBuffers<B, D> {
     self.num_values = 0;
     self.num_nulls = 0;
 

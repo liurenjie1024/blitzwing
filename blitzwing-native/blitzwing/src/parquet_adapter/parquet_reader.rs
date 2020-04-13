@@ -1,12 +1,16 @@
 use crate::{
   error::{
-    BlitzwingErrorKind::{ArrowError, InvalidArgumentError, IllegalStateError},
+    BlitzwingErrorKind::{ArrowError, IllegalStateError, InvalidArgumentError},
     Result,
   },
   parquet_adapter::array_reader::{ArrayReaderRef, *},
   proto::parquet::{ParquetReaderProto, RowGroupProto},
   types::ColumnDescProtoPtr,
   util::{
+    buffer::{
+      buffer::BufferData,
+      manager::{BufferDataManagerRef, BufferManager, CachedManager, RootManager},
+    },
     reader::{create_page_reader, PageReaderIteratorRef, PageReaderRef},
     shared_queue::SharedQueue,
   },
@@ -19,15 +23,12 @@ use arrow::{
 use failure::ResultExt;
 use parquet::basic::Type;
 use std::{collections::HashMap, convert::TryInto, rc::Rc, sync::Arc};
-use crate::util::buffer::manager::BufferDataManagerRef;
-use crate::util::buffer::buffer::BufferData;
-use crate::util::buffer::manager::{CachedManager, BufferManager, RootManager};
 
 struct ColumnInfo {
   array_reader: ArrayReaderRef,
   page_readers: SharedQueue<PageReaderRef>,
   column_desc: ColumnDescProtoPtr,
-  buffer_data_manager: BufferDataManagerRef
+  buffer_data_manager: BufferDataManagerRef,
 }
 
 pub(crate) struct ParquetReader {
@@ -62,7 +63,10 @@ impl ParquetReader {
       match last_size {
         Some(s) => {
           if s != cur_size {
-            return Err(IllegalStateError(format!("Column batch size not match, previous: {}, current: {}", s, cur_size)))?;
+            return Err(IllegalStateError(format!(
+              "Column batch size not match, previous: {}, current: {}",
+              s, cur_size
+            )))?;
           }
         }
         None => {
@@ -89,7 +93,6 @@ impl ParquetReader {
     Ok(RecordBatch::try_new(self.schema.clone(), columns).context(ArrowError)?)
   }
 
-
   pub(crate) fn close(&mut self) -> Result<()> {
     Ok(())
   }
@@ -98,7 +101,7 @@ impl ParquetReader {
     let buffer_data = BufferData::new(address as *mut u8, length);
     if let Some(buffer_manager) = self.buffers.remove(&buffer_data) {
       buffer_manager.deallocate(&buffer_data)?;
-    } 
+    }
 
     Ok(())
   }
@@ -109,7 +112,7 @@ pub(crate) fn create_parquet_reader(meta: ParquetReaderProto) -> Result<ParquetR
 
   let schema = schema_from_bytes(meta.get_schema())
     .ok_or_else(|| InvalidArgumentError("Can't build arrow schema!".to_string()))?;
-  
+
   let root_manager = Arc::new(RootManager {});
 
   for column in meta.get_column_desc() {
@@ -125,42 +128,82 @@ pub(crate) fn create_parquet_reader(meta: ParquetReaderProto) -> Result<ParquetR
 
       let array_reader: ArrayReaderRef =
         match (field.data_type(), column.get_physical_type().try_into()?) {
-          (&DataType::Int8, Type::INT32) => {
-            Box::new(Int8ArrayReader::new(batch_size, true, column_desc_ptr, page_reader_iter, buffer_manager)?)
-          }
-          (&DataType::Int16, Type::INT32) => {
-            Box::new(Int16ArrayReader::new(batch_size, true, column_desc_ptr, page_reader_iter, buffer_manager)?)
-          }
-          (&DataType::Int32, Type::INT32) => {
-            Box::new(Int32ArrayReader::new(batch_size, false, column_desc_ptr, page_reader_iter, buffer_manager)?)
-          }
-          (&DataType::UInt8, Type::INT32) => {
-            Box::new(UInt8ArrayReader::new(batch_size, true, column_desc_ptr, page_reader_iter, buffer_manager)?)
-          }
-          (&DataType::UInt16, Type::INT32) => {
-            Box::new(UInt16ArrayReader::new(batch_size, true, column_desc_ptr, page_reader_iter, buffer_manager)?)
-          }
-          (&DataType::UInt32, Type::INT32) => {
-            Box::new(UInt32ArrayReader::new(batch_size, false, column_desc_ptr, page_reader_iter, buffer_manager)?)
-          }
-          (&DataType::Int64, Type::INT64) => {
-            Box::new(Int64ArrayReader::new(batch_size, false, column_desc_ptr, page_reader_iter, buffer_manager)?)
-          }
-          (&DataType::UInt64, Type::INT64) => {
-            Box::new(UInt64ArrayReader::new(batch_size, false, column_desc_ptr, page_reader_iter, buffer_manager)?)
-          }
-          (&DataType::Float32, Type::FLOAT) => {
-            Box::new(Float32ArrayReader::new(batch_size, false, column_desc_ptr, page_reader_iter, buffer_manager)?)
-          }
-          (&DataType::Float64, Type::DOUBLE) => {
-            Box::new(Float64ArrayReader::new(batch_size, false, column_desc_ptr, page_reader_iter, buffer_manager)?)
-          }
+          (&DataType::Int8, Type::INT32) => Box::new(Int8ArrayReader::new(
+            batch_size,
+            true,
+            column_desc_ptr,
+            page_reader_iter,
+            buffer_manager,
+          )?),
+          (&DataType::Int16, Type::INT32) => Box::new(Int16ArrayReader::new(
+            batch_size,
+            true,
+            column_desc_ptr,
+            page_reader_iter,
+            buffer_manager,
+          )?),
+          (&DataType::Int32, Type::INT32) => Box::new(Int32ArrayReader::new(
+            batch_size,
+            false,
+            column_desc_ptr,
+            page_reader_iter,
+            buffer_manager,
+          )?),
+          (&DataType::UInt8, Type::INT32) => Box::new(UInt8ArrayReader::new(
+            batch_size,
+            true,
+            column_desc_ptr,
+            page_reader_iter,
+            buffer_manager,
+          )?),
+          (&DataType::UInt16, Type::INT32) => Box::new(UInt16ArrayReader::new(
+            batch_size,
+            true,
+            column_desc_ptr,
+            page_reader_iter,
+            buffer_manager,
+          )?),
+          (&DataType::UInt32, Type::INT32) => Box::new(UInt32ArrayReader::new(
+            batch_size,
+            false,
+            column_desc_ptr,
+            page_reader_iter,
+            buffer_manager,
+          )?),
+          (&DataType::Int64, Type::INT64) => Box::new(Int64ArrayReader::new(
+            batch_size,
+            false,
+            column_desc_ptr,
+            page_reader_iter,
+            buffer_manager,
+          )?),
+          (&DataType::UInt64, Type::INT64) => Box::new(UInt64ArrayReader::new(
+            batch_size,
+            false,
+            column_desc_ptr,
+            page_reader_iter,
+            buffer_manager,
+          )?),
+          (&DataType::Float32, Type::FLOAT) => Box::new(Float32ArrayReader::new(
+            batch_size,
+            false,
+            column_desc_ptr,
+            page_reader_iter,
+            buffer_manager,
+          )?),
+          (&DataType::Float64, Type::DOUBLE) => Box::new(Float64ArrayReader::new(
+            batch_size,
+            false,
+            column_desc_ptr,
+            page_reader_iter,
+            buffer_manager,
+          )?),
           (&DataType::Utf8, Type::BYTE_ARRAY) => Box::new(UTF8ArrayReader::new(
             batch_size,
             column_desc_ptr,
             DataType::Utf8,
             page_reader_iter,
-            buffer_manager
+            buffer_manager,
           )?),
           (dt, parquet_type) => {
             return Err(nyi!(
@@ -182,6 +225,11 @@ pub(crate) fn create_parquet_reader(meta: ParquetReaderProto) -> Result<ParquetR
   }
 
   let buffers = HashMap::with_capacity(columns.len() * 3);
-  Ok(ParquetReader { schema: Arc::new(schema), columns, meta, 
-    buffers, root_buffer_manager: root_manager })
+  Ok(ParquetReader {
+    schema: Arc::new(schema),
+    columns,
+    meta,
+    buffers,
+    root_buffer_manager: root_manager,
+  })
 }

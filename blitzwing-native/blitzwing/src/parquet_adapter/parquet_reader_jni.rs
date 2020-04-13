@@ -9,7 +9,7 @@ use crate::{
 };
 use jni::{
   objects::JClass,
-  sys::{jbyteArray, jlong, jint},
+  sys::{jbyteArray, jint, jlong},
   JNIEnv,
 };
 use std::{
@@ -57,8 +57,7 @@ pub extern "system" fn Java_com_ebay_hadoop_blitzwing_arrow_adaptor_parquet_JniW
 ) -> jlong {
   let call_inner = || -> Result<jlong> {
     let mut wrapper = JniWrapper::<'a, ParquetReader>::new(env.clone(), parquet_reader_id)?;
-    wrapper.inner_mut().next_batch()
-      .map(|len| len as jlong)
+    wrapper.inner_mut().next_batch().map(|len| len as jlong)
   };
 
   // TODO: Remember to free buffer
@@ -66,10 +65,12 @@ pub extern "system" fn Java_com_ebay_hadoop_blitzwing_arrow_adaptor_parquet_JniW
 }
 
 #[no_mangle]
-pub extern "system" fn Java_com_ebay_hadoop_blitzwing_arrow_adaptor_parquet_JniWrapper_collect<'a>(
+pub extern "system" fn Java_com_ebay_hadoop_blitzwing_arrow_adaptor_parquet_JniWrapper_collect<
+  'a,
+>(
   env: JNIEnv<'a>,
   _klass: JClass,
-  parquet_reader_id: jlong
+  parquet_reader_id: jlong,
 ) -> jbyteArray {
   let call_inner = || -> Result<jbyteArray> {
     let mut wrapper = JniWrapper::<'a, ParquetReader>::new(env.clone(), parquet_reader_id)?;
@@ -88,7 +89,7 @@ pub extern "system" fn Java_com_ebay_hadoop_blitzwing_arrow_adaptor_parquet_JniW
   _klass: JClass,
   parquet_reader_id: jlong,
   buffer_id: jlong,
-  len: jint
+  len: jint,
 ) {
   let call_inner = || -> Result<()> {
     let mut wrapper = JniWrapper::<'a, ParquetReader>::new(env.clone(), parquet_reader_id)?;
