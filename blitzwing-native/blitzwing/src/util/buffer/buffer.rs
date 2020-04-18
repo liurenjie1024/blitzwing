@@ -17,27 +17,69 @@ use std::{
   sync::Arc,
 };
 
-#[derive(Clone, Eq, PartialEq, Hash)]
+#[derive(new, Clone, Eq, PartialEq)]
+pub struct BufferSpec {
+  layout: Layout,
+  // hint for allocator
+  resizable: bool,
+}
+
+impl Default for BufferSpec {
+  fn default() -> Self {
+    Self {
+      layout: Layout::new::<()>(),
+      resizable: true
+    }
+  }
+}
+
+impl BufferSpec {
+  pub fn with_capacity(size: usize, resizable: bool) -> Self {
+    Self {
+      layout: unsafe { Layout::from_size_align_unchecked(size, ALIGNMENT) },
+      resizable
+    }
+  }
+
+  pub fn layout(&self) -> &Layout {
+    &self.layout
+  }
+
+  pub fn resizable(&self) -> bool {
+    self.resizable
+  }
+}
+
+#[derive(Clone, Eq, PartialEq)]
 pub struct BufferData {
   ptr: *mut u8,
-  len: usize,
   capacity: usize,
+  spec: BufferSpec,
 }
 
 impl Default for BufferData {
   fn default() -> Self {
-    Self { ptr: null_mut(), len: 0, capacity: 0 }
+    Self { 
+      ptr: null_mut(), 
+      capacity: 0,
+      spec: BufferSpec::default(),
+    }
   }
 }
 
 pub struct Buffer {
   inner: BufferData,
+  len: usize,
   manager: BufferDataManagerRef,
 }
 
 impl Default for Buffer {
   fn default() -> Self {
-    Self { inner: BufferData::default(), manager: Arc::new(RootManager::default()) }
+    Self { 
+      inner: BufferData::default(), 
+      len: 0,
+      manager: Arc::new(RootManager::default()) 
+    }
   }
 }
 
@@ -64,34 +106,50 @@ impl Debug for Buffer {
 }
 
 impl BufferData {
-  pub(crate) fn new(ptr: *mut u8, size: usize) -> Self {
-    Self { ptr, len: 0, capacity: size }
+  pub(crate) fn new(ptr: *mut u8, size: usize, spec: BufferSpec) -> Self {
+    Self { 
+      ptr, 
+      capacity: size,
+      spec
+     }
   }
 
-  pub(crate) fn from_arrow_buffer_without_len(arrow_buffer: &ArrowBuffer) -> Self {
-    Self { ptr: arrow_buffer.raw_data() as *mut u8, len: 0, capacity: arrow_buffer.capacity() }
-  }
+  // pub(crate) fn from_arrow_buffer_without_len(arrow_buffer: &ArrowBuffer) -> Self {
+  //   Self { ptr: arrow_buffer.raw_data() as *mut u8, len: 0, capacity: arrow_buffer.capacity() }
+  // }
 
-  pub(super) fn as_ptr(&self) -> *mut u8 {
+  pub(crate) fn as_ptr(&self) -> *mut u8 {
     self.ptr
   }
 
-  pub(super) fn capacity(&self) -> usize {
+  pub(crate) fn capacity(&self) -> usize {
     self.capacity
+  }
+
+  pub(crate) fn spec(&self) -> &BufferSpec {
+    &self.spec
   }
 }
 
 impl Buffer {
-  pub(super) fn with_capacity(capacity: usize) -> Result<Self> {
-    BufferManager::default().allocate_aligned(capacity)
+  pub(super) fn with_capacity(capacity: usize, resizable: bool) -> Result<Self> {
+    BufferManager::default().allocate_aligned(capacity, resizable)
   }
 
   pub(super) fn new(inner: BufferData, manager: BufferDataManagerRef) -> Self {
-    Self { inner, manager }
+    Self { 
+      inner, 
+      len: 0,
+      manager 
+    }
+  }
+
+  pub(crate) fn buffer_data(&self) -> BufferData {
+    self.inner.clone()
   }
 
   pub(crate) fn len(&self) -> usize {
-    self.inner.len
+    self.len
   }
 
   pub(crate) fn raw_data(&self) -> *mut u8 {
@@ -124,7 +182,7 @@ impl Buffer {
     let v = if val { 255 } else { 0 };
     unsafe {
       std::ptr::write_bytes(self.inner.ptr, v, end);
-      self.inner.len = end;
+      self.len = end;
     }
   }
 
@@ -172,7 +230,7 @@ impl Buffer {
     if new_len > self.len() {
       self.reserve(new_len)?;
     }
-    self.inner.len = new_len;
+    self.len = new_len;
     Ok(())
   }
 }
@@ -216,7 +274,7 @@ impl<'a> TryFrom<&'a [u8]> for Buffer {
     // allocate aligned memory buffer
     let len = slice.len() * mem::size_of::<u8>();
     let buffer_manager = BufferManager::default();
-    let buffer = buffer_manager.allocate_aligned(len)?;
+    let buffer = buffer_manager.allocate_aligned(len, false)?;
     unsafe {
       memory::memcpy(buffer.inner.as_ptr(), slice.as_ptr(), len);
     }
@@ -242,7 +300,7 @@ impl Write for Buffer {
     }
     unsafe {
       memory::memcpy(self.inner.ptr.offset(self.len() as isize), buf.as_ptr(), buf.len());
-      self.inner.len += buf.len();
+      self.len += buf.len();
       Ok(buf.len())
     }
   }
@@ -293,15 +351,15 @@ mod tests {
 
   #[test]
   fn test_with_bitset() {
-    let mut buf = Buffer::with_capacity(64).expect("Failed to create buffer");
+    let mut buf = Buffer::with_capacity(64, false).expect("Failed to create buffer");
     buf.with_bitset(64, false);
     assert_eq!(0, bit_util::count_set_bits(buf.as_ref()));
 
-    let mut buf = Buffer::with_capacity(64).expect("Failed to create buffer");
+    let mut buf = Buffer::with_capacity(64, false).expect("Failed to create buffer");
     buf.with_bitset(64, true);
     assert_eq!(512, bit_util::count_set_bits(buf.as_ref()));
 
-    let mut buf = Buffer::with_capacity(64).expect("Failed to create buffer");
+    let mut buf = Buffer::with_capacity(64, false).expect("Failed to create buffer");
     buf.set_null_bits(32, 32);
     assert_eq!(256, bit_util::count_set_bits(buf.as_ref()));
   }
@@ -338,7 +396,7 @@ mod tests {
 
   #[test]
   fn test_with_capacity() {
-    let buf = Buffer::with_capacity(63).unwrap();
+    let buf = Buffer::with_capacity(63, false).unwrap();
     assert_eq!(64, buf.capacity());
     assert_eq!(0, buf.len());
     assert!(buf.is_empty());
@@ -374,7 +432,7 @@ mod tests {
 
   #[test]
   fn test_reserve() {
-    let mut buf = Buffer::with_capacity(1).unwrap();
+    let mut buf = Buffer::with_capacity(1, true).unwrap();
     assert_eq!(64, buf.capacity());
 
     // Reserving a smaller capacity should have no effect.
@@ -389,7 +447,7 @@ mod tests {
 
   #[test]
   fn test_mutable_resize() {
-    let mut buf = Buffer::with_capacity(1).unwrap();
+    let mut buf = Buffer::with_capacity(1, true).unwrap();
     assert_eq!(64, buf.capacity());
     assert_eq!(0, buf.len());
 

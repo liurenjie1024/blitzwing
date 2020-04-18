@@ -33,16 +33,32 @@ struct ColumnInfo {
 
 pub(crate) struct ParquetReader {
   schema: SchemaRef,
-  columns: HashMap<String, ColumnInfo>,
+  columns: Vec<ColumnInfo>,
+  /// Key: column name
+  /// Value: index into `columns`
+  name_to_column: HashMap<String, usize>,
   meta: ParquetReaderProto,
-  buffers: HashMap<BufferData, BufferDataManagerRef>,
+  /// Key: buffer address
+  /// Value: index into `columns`
+  buffers: HashMap<*mut u8, usize>,
   root_buffer_manager: BufferDataManagerRef,
 }
 
 impl ParquetReader {
+  fn column_by_name<S: AsRef<str>>(&self, name: S) -> Option<&ColumnInfo> {
+    self.name_to_column.get(name.as_ref())
+      .and_then(|idx| self.columns.get(*idx))
+  }
+
+  fn column_by_name_mut<S: AsRef<str>>(&mut self, name: S) -> Option<&mut ColumnInfo> {
+    self.name_to_column.get(name.as_ref())
+      .map(|idx| *idx)
+      .and_then(move |idx| self.columns.get_mut(idx))
+  }
+
   pub(crate) fn set_data(&mut self, row_group_meta: RowGroupProto) -> Result<()> {
     for column_chunk in row_group_meta.get_columns() {
-      if let Some(column) = self.columns.get_mut(column_chunk.get_column_name()) {
+      if let Some(column) = self.column_by_name_mut(column_chunk.get_column_name()) {
         let page_reader = Box::new(create_page_reader(column.column_desc.as_ref(), column_chunk)?);
         column.page_readers.push(page_reader)?;
       } else {
@@ -58,7 +74,7 @@ impl ParquetReader {
 
   pub(crate) fn next_batch(&mut self) -> Result<usize> {
     let mut last_size = None;
-    for c in self.columns.values_mut() {
+    for c in &mut self.columns {
       let cur_size = c.array_reader.next_batch()?;
       match last_size {
         Some(s) => {
@@ -80,13 +96,12 @@ impl ParquetReader {
 
   pub(crate) fn collect(&mut self) -> Result<RecordBatch> {
     let mut columns = Vec::with_capacity(self.columns.len());
-    for column_info in self.columns.values_mut() {
+    for (idx, column_info) in self.columns.iter_mut().enumerate() {
       let array = column_info.array_reader.collect()?;
       columns.push(array.clone());
 
       for b in array.data_ref().buffers() {
-        let buffer_data = BufferData::from_arrow_buffer_without_len(b);
-        self.buffers.insert(buffer_data, column_info.buffer_data_manager.clone());
+        self.buffers.insert(b.raw_data() as *mut u8, idx);
       }
     }
 
@@ -97,10 +112,10 @@ impl ParquetReader {
     Ok(())
   }
 
-  pub(crate) fn free_buffer(&mut self, address: *const u8, length: usize) -> Result<()> {
-    let buffer_data = BufferData::new(address as *mut u8, length);
-    if let Some(buffer_manager) = self.buffers.remove(&buffer_data) {
-      buffer_manager.deallocate(&buffer_data)?;
+  pub(crate) fn free_buffer(&mut self, address: *const u8, _length: usize) -> Result<()> {
+    let address = address as *mut u8;
+    if let Some(idx) = self.buffers.remove(&address) {
+      (&mut self.columns[idx]).array_reader.free_buffer(address)?;
     }
 
     Ok(())
@@ -108,7 +123,8 @@ impl ParquetReader {
 }
 
 pub(crate) fn create_parquet_reader(meta: ParquetReaderProto) -> Result<ParquetReader> {
-  let mut columns = HashMap::<String, ColumnInfo>::with_capacity(meta.get_column_desc().len());
+  let mut columns = Vec::with_capacity(meta.get_column_desc().len());
+  let mut name_to_column = HashMap::<String, usize>::with_capacity(meta.get_column_desc().len());
 
   let schema = schema_from_bytes(meta.get_schema())
     .ok_or_else(|| InvalidArgumentError("Can't build arrow schema!".to_string()))?;
@@ -215,7 +231,9 @@ pub(crate) fn create_parquet_reader(meta: ParquetReaderProto) -> Result<ParquetR
         };
 
       let column_info = ColumnInfo { array_reader, page_readers, column_desc, buffer_data_manager };
-      columns.insert(column.get_column_name().to_string(), column_info);
+      columns.push(column_info);
+      name_to_column.insert(column.get_column_name().to_string(), columns.len() - 1);
+
     } else {
       return Err(InvalidArgumentError(format!(
         "Column [{}] not found in schema.",
@@ -228,6 +246,7 @@ pub(crate) fn create_parquet_reader(meta: ParquetReaderProto) -> Result<ParquetR
   Ok(ParquetReader {
     schema: Arc::new(schema),
     columns,
+    name_to_column,
     meta,
     buffers,
     root_buffer_manager: root_manager,

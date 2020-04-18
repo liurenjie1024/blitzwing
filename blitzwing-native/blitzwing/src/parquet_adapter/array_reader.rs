@@ -27,11 +27,13 @@ use parquet::data_type::{
   Int64Type as ParquetInt64Type,
 };
 use std::{convert::From, marker::PhantomData, mem::size_of, sync::Arc, vec::Vec};
+use crate::util::buffer::BufferData;
 
 pub trait ArrayReader {
   fn data_type(&self) -> &DataType;
   fn next_batch(&mut self) -> Result<usize>;
   fn collect(&mut self) -> Result<ArrayRef>;
+  fn free_buffer(&mut self, address: *mut u8) -> Result<bool>;
 }
 
 pub(crate) type ArrayReaderRef = Box<dyn ArrayReader>;
@@ -46,6 +48,8 @@ pub struct PrimitiveArrayReader<A, P>
   data_type: DataType,
   record_reader: RecordReader<P, Buffer, Buffer>,
   buffer_manager: BufferManager,
+  // A temporary workaround before new buffer design merged into arrow community
+  collected_buffers: Vec<BufferData>,
   batch_size: usize,
 }
 
@@ -66,7 +70,7 @@ where
       batch_size,
       column_desc,
       create_record_reader_buffers::<P, _, Buffer>(batch_size, &buffer_manager, || {
-        buffer_manager.allocate_aligned(batch_size)
+        buffer_manager.allocate_aligned(batch_size, false)
       })?,
       page_readers,
     )?;
@@ -82,6 +86,7 @@ where
       data_type: A::get_data_type(),
       record_reader,
       buffer_manager,
+      collected_buffers: Vec::with_capacity(4),
       batch_size,
     })
   }
@@ -110,15 +115,17 @@ where
       self.record_reader.collect_buffers(create_record_reader_buffers::<P, _, Buffer>(
         self.batch_size,
         &self.buffer_manager,
-        || self.buffer_manager.allocate_aligned(self.batch_size),
+        || self.buffer_manager.allocate_aligned(self.batch_size, false),
       )?);
 
     let mut array_data =
       ArrayDataBuilder::new(A::get_data_type()).len(num_values).null_count(null_count);
 
     if null_count > 0 {
+      let mut null_buffer = buffers.null_bitmap.finish();
+      self.collected_buffers.push(null_buffer.buffer_data());
       array_data =
-        array_data.null_bit_buffer(unsafe { buffers.null_bitmap.finish().to_arrow_buffer() });
+        array_data.null_bit_buffer(unsafe { null_buffer.to_arrow_buffer() });
     }
 
     if let Some(arrow_builder) = &mut self.arrow_data_buffer {
@@ -127,13 +134,26 @@ where
         arrow_builder.append(values[i].clone().cast()).context(ArrowError)?;
       }
 
-      array_data = array_data.add_buffer(unsafe { arrow_builder.finish().to_arrow_buffer() });
+      let mut arrow_buffer = arrow_builder.finish();
+      self.collected_buffers.push(arrow_buffer.buffer_data());
+
+      array_data = array_data.add_buffer(unsafe { arrow_buffer.to_arrow_buffer() });
     } else {
+      self.collected_buffers.push(buffers.parquet_data_buffer.buffer_data());
       array_data = array_data.add_buffer(unsafe { buffers.parquet_data_buffer.to_arrow_buffer() });
     }
 
     let array = PrimitiveArray::<A>::from(array_data.build());
     Ok(Arc::new(array))
+  }
+
+  fn free_buffer(&mut self, address: *mut u8) -> Result<bool> {
+    if let Some(pos) = self.collected_buffers.iter().position(|b| b.as_ptr() == address) {
+      self.buffer_manager.deallocate(self.collected_buffers.remove(pos))?;
+      Ok(true)
+    } else {
+      Ok(false)
+    }
   }
 }
 
@@ -142,12 +162,12 @@ where
   A: From<ArrayDataRef> + Array + 'static,
   P: ParquetType,
 {
-  arrow_data_buffer: Buffer,
-  arrow_offset_buffer: Int32BufferBuilder,
+  // arrow_offset_buffer: Int32BufferBuilder,
   data_type: DataType,
   record_reader: RecordReader<P, Vec<P::T>, Buffer>,
   buffer_manager: BufferManager,
   batch_size: usize,
+  collected_buffers: Vec<BufferData>,
   _phantom_arrow: PhantomData<A>,
   _phantom_parquet: PhantomData<P>,
 }
@@ -171,8 +191,6 @@ where
         Ok(buffer)
       })?;
 
-    let arrow_data_buffer = buffer_manager.allocate_aligned(batch_size)?;
-    let arrow_offset_buffer = Int32BufferBuilder::new(batch_size + 1, buffer_manager.clone())?;
     let record_reader = RecordReader::<P, Vec<P::T>, Buffer>::new(
       batch_size,
       column_desc,
@@ -181,12 +199,13 @@ where
     )?;
 
     Ok(Self {
-      arrow_data_buffer,
-      arrow_offset_buffer,
+      // arrow_data_buffer,
+      // arrow_offset_buffer,
       data_type,
       record_reader,
       buffer_manager,
       batch_size,
+      collected_buffers: Vec::with_capacity(4),
       _phantom_arrow: PhantomData,
       _phantom_parquet: PhantomData,
     })
@@ -224,28 +243,46 @@ where
       ArrayDataBuilder::new(self.data_type.clone()).len(values_read).null_count(null_count);
 
     let data_len = (&buffers.parquet_data_buffer[0..values_read]).iter().map(|b| b.len()).sum();
-    self.arrow_data_buffer.resize(data_len).context(ArrowError)?;
+    let mut arrow_data_buffer = self.buffer_manager.allocate_aligned(data_len, true)?;
+    let mut arrow_offset_buffer = Int32BufferBuilder::new(self.batch_size + 1, self.buffer_manager.clone())?;
+    // self.arrow_data_buffer.resize(data_len).context(ArrowError)?;
 
     let mut start: usize = 0;
-    let arrow_data = self.arrow_data_buffer.as_mut();
-    self.arrow_offset_buffer.append(start as i32).context(ArrowError)?;
+    let arrow_data = arrow_data_buffer.as_mut();
+    arrow_offset_buffer.append(start as i32).context(ArrowError)?;
     for b in &buffers.parquet_data_buffer[0..values_read] {
       let end = start + b.len() as usize;
       (&mut arrow_data[start..end]).copy_from_slice(b.data());
       start = end;
-      self.arrow_offset_buffer.append(start as i32).context(ArrowError)?;
+      arrow_offset_buffer.append(start as i32).context(ArrowError)?;
     }
 
+    self.collected_buffers.push(arrow_data_buffer.buffer_data());
+
+    let mut arrow_offset_buffer = arrow_offset_buffer.finish();
+    self.collected_buffers.push(arrow_offset_buffer.buffer_data());
+
     array_data = array_data
-      .add_buffer(unsafe { self.arrow_offset_buffer.finish().to_arrow_buffer() })
-      .add_buffer(unsafe { self.arrow_data_buffer.to_arrow_buffer() });
+      .add_buffer(unsafe { arrow_offset_buffer.to_arrow_buffer() })
+      .add_buffer(unsafe { arrow_data_buffer.to_arrow_buffer() });
 
     if null_count > 0 {
+      let mut null_buffer = buffers.null_bitmap.finish();
+      self.collected_buffers.push(null_buffer.buffer_data());
       array_data =
-        array_data.null_bit_buffer(unsafe { buffers.null_bitmap.finish().to_arrow_buffer() });
+        array_data.null_bit_buffer(unsafe { null_buffer.to_arrow_buffer() });
     }
 
     Ok(Arc::new(A::from(array_data.build())))
+  }
+
+  fn free_buffer(&mut self, address: *mut u8) -> Result<bool> {
+    if let Some(pos) = self.collected_buffers.iter().position(|b| b.as_ptr() == address) {
+      self.buffer_manager.deallocate(self.collected_buffers.remove(pos))?;
+      Ok(true)
+    } else {
+      Ok(false)
+    }
   }
 }
 
@@ -259,7 +296,7 @@ where
   F: FnOnce() -> Result<B>,
 {
   let parquet_data_buffer = func()?;
-  let def_levels = buffer_manager.allocate_aligned(batch_size * size_of::<i16>())?;
+  let def_levels = buffer_manager.allocate_aligned(batch_size * size_of::<i16>(), false)?;
   let null_bitmap = BooleanBufferBuilder::new(batch_size, buffer_manager.clone())?;
 
   Ok(RecordReaderBuffers { parquet_data_buffer, def_levels, null_bitmap })

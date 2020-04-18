@@ -61,7 +61,7 @@ impl<T: ArrowNumericType> BufferBuilderTrait for BufferBuilder<T> {
   /// Creates a builder with a fixed initial capacity
   fn new(capacity: usize, buffer_manager: BufferManager) -> Result<Self> {
     Ok(Self {
-      buffer: buffer_manager.allocate_aligned(capacity)?,
+      buffer: buffer_manager.allocate_aligned(capacity, false)?,
       len: 0,
       buffer_manager,
       _marker: PhantomData,
@@ -137,7 +137,7 @@ impl BufferBuilderTrait for BooleanBufferBuilder {
   type Native = bool;
   /// Creates a builder with a fixed initial capacity.
   fn new(capacity: usize, buffer_manager: BufferManager) -> Result<Self> {
-    Ok(Self { buffer: buffer_manager.allocate_aligned(capacity)?, len: 0, buffer_manager })
+    Ok(Self { buffer: buffer_manager.allocate_aligned(capacity, false)?, len: 0, buffer_manager })
   }
 
   /// Returns the number of array elements (slots) in the builder

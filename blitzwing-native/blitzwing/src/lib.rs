@@ -2,6 +2,7 @@
 #[macro_use]
 extern crate failure;
 extern crate arrow;
+#[macro_use]
 extern crate derive_new;
 extern crate failure_derive;
 extern crate jni;
