@@ -8,7 +8,6 @@ use crate::{
   types::ColumnDescProtoPtr,
   util::{
     buffer::{
-      buffer::BufferData,
       manager::{BufferDataManagerRef, BufferManager, CachedManager, RootManager},
     },
     reader::{create_page_reader, PageReaderIteratorRef, PageReaderRef},
