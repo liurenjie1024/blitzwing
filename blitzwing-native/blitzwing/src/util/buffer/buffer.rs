@@ -26,19 +26,13 @@ pub struct BufferSpec {
 
 impl Default for BufferSpec {
   fn default() -> Self {
-    Self {
-      layout: Layout::new::<()>(),
-      resizable: true
-    }
+    Self { layout: Layout::new::<()>(), resizable: true }
   }
 }
 
 impl BufferSpec {
   pub fn with_capacity(size: usize, resizable: bool) -> Self {
-    Self {
-      layout: unsafe { Layout::from_size_align_unchecked(size, ALIGNMENT) },
-      resizable
-    }
+    Self { layout: unsafe { Layout::from_size_align_unchecked(size, ALIGNMENT) }, resizable }
   }
 
   pub fn layout(&self) -> &Layout {
@@ -59,11 +53,7 @@ pub struct BufferData {
 
 impl Default for BufferData {
   fn default() -> Self {
-    Self { 
-      ptr: null_mut(), 
-      capacity: 0,
-      spec: BufferSpec::default(),
-    }
+    Self { ptr: null_mut(), capacity: 0, spec: BufferSpec::default() }
   }
 }
 
@@ -75,11 +65,7 @@ pub struct Buffer {
 
 impl Default for Buffer {
   fn default() -> Self {
-    Self { 
-      inner: BufferData::default(), 
-      len: 0,
-      manager: Arc::new(RootManager::default()) 
-    }
+    Self { inner: BufferData::default(), len: 0, manager: Arc::new(RootManager::default()) }
   }
 }
 
@@ -107,11 +93,7 @@ impl Debug for Buffer {
 
 impl BufferData {
   pub(crate) fn new(ptr: *mut u8, size: usize, spec: BufferSpec) -> Self {
-    Self { 
-      ptr, 
-      capacity: size,
-      spec
-     }
+    Self { ptr, capacity: size, spec }
   }
 
   // pub(crate) fn from_arrow_buffer_without_len(arrow_buffer: &ArrowBuffer) -> Self {
@@ -137,11 +119,7 @@ impl Buffer {
   }
 
   pub(super) fn new(inner: BufferData, manager: BufferDataManagerRef) -> Self {
-    Self { 
-      inner, 
-      len: 0,
-      manager 
-    }
+    Self { inner, len: 0, manager }
   }
 
   pub(crate) fn buffer_data(&self) -> BufferData {

@@ -7,9 +7,7 @@ use crate::{
   proto::parquet::{ParquetReaderProto, RowGroupProto},
   types::ColumnDescProtoPtr,
   util::{
-    buffer::{
-      manager::{BufferDataManagerRef, BufferManager, CachedManager, RootManager},
-    },
+    buffer::manager::{BufferDataManagerRef, BufferManager, CachedManager, RootManager},
     reader::{create_page_reader, PageReaderIteratorRef, PageReaderRef},
     shared_queue::SharedQueue,
   },
@@ -45,12 +43,13 @@ pub(crate) struct ParquetReader {
 
 impl ParquetReader {
   fn column_by_name<S: AsRef<str>>(&self, name: S) -> Option<&ColumnInfo> {
-    self.name_to_column.get(name.as_ref())
-      .and_then(|idx| self.columns.get(*idx))
+    self.name_to_column.get(name.as_ref()).and_then(|idx| self.columns.get(*idx))
   }
 
   fn column_by_name_mut<S: AsRef<str>>(&mut self, name: S) -> Option<&mut ColumnInfo> {
-    self.name_to_column.get(name.as_ref())
+    self
+      .name_to_column
+      .get(name.as_ref())
       .map(|idx| *idx)
       .and_then(move |idx| self.columns.get_mut(idx))
   }
@@ -232,7 +231,6 @@ pub(crate) fn create_parquet_reader(meta: ParquetReaderProto) -> Result<ParquetR
       let column_info = ColumnInfo { array_reader, page_readers, column_desc, buffer_data_manager };
       columns.push(column_info);
       name_to_column.insert(column.get_column_name().to_string(), columns.len() - 1);
-
     } else {
       return Err(InvalidArgumentError(format!(
         "Column [{}] not found in schema.",

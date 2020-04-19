@@ -4,7 +4,7 @@ use crate::{
   types::ColumnDescProtoPtr,
   util::{
     buffer::{
-      BooleanBufferBuilder, Buffer, BufferBuilder, BufferBuilderTrait, BufferManager,
+      BooleanBufferBuilder, Buffer, BufferBuilder, BufferBuilderTrait, BufferData, BufferManager,
       Int32BufferBuilder,
     },
     num::Cast,
@@ -27,7 +27,6 @@ use parquet::data_type::{
   Int64Type as ParquetInt64Type,
 };
 use std::{convert::From, marker::PhantomData, mem::size_of, sync::Arc, vec::Vec};
-use crate::util::buffer::BufferData;
 
 pub trait ArrayReader {
   fn data_type(&self) -> &DataType;
@@ -124,8 +123,7 @@ where
     if null_count > 0 {
       let mut null_buffer = buffers.null_bitmap.finish();
       self.collected_buffers.push(null_buffer.buffer_data());
-      array_data =
-        array_data.null_bit_buffer(unsafe { null_buffer.to_arrow_buffer() });
+      array_data = array_data.null_bit_buffer(unsafe { null_buffer.to_arrow_buffer() });
     }
 
     if let Some(arrow_builder) = &mut self.arrow_data_buffer {
@@ -244,7 +242,8 @@ where
 
     let data_len = (&buffers.parquet_data_buffer[0..values_read]).iter().map(|b| b.len()).sum();
     let mut arrow_data_buffer = self.buffer_manager.allocate_aligned(data_len, true)?;
-    let mut arrow_offset_buffer = Int32BufferBuilder::new(self.batch_size + 1, self.buffer_manager.clone())?;
+    let mut arrow_offset_buffer =
+      Int32BufferBuilder::new(self.batch_size + 1, self.buffer_manager.clone())?;
     // self.arrow_data_buffer.resize(data_len).context(ArrowError)?;
 
     let mut start: usize = 0;
@@ -269,8 +268,7 @@ where
     if null_count > 0 {
       let mut null_buffer = buffers.null_bitmap.finish();
       self.collected_buffers.push(null_buffer.buffer_data());
-      array_data =
-        array_data.null_bit_buffer(unsafe { null_buffer.to_arrow_buffer() });
+      array_data = array_data.null_bit_buffer(unsafe { null_buffer.to_arrow_buffer() });
     }
 
     Ok(Arc::new(A::from(array_data.build())))

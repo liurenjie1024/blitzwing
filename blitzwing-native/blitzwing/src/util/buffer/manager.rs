@@ -1,13 +1,15 @@
 use super::buffer::{Buffer, BufferData, BufferSpec};
 use crate::error::{
-  BlitzwingErrorKind::{InvalidArgumentError, LayoutError, MemoryError},
+  BlitzwingErrorKind::{FatalError, InvalidArgumentError, LayoutError, MemoryError},
   Result,
 };
 use arrow::{memory, memory::ALIGNMENT, util::bit_util};
 use failure::ResultExt;
-use std::{alloc::Layout, sync::Arc, cmp};
-use std::sync::Mutex;
-use crate::error::BlitzwingErrorKind::FatalError;
+use std::{
+  alloc::Layout,
+  cmp,
+  sync::{Arc, Mutex},
+};
 
 pub type BufferDataManagerRef = Arc<dyn Manager>;
 #[derive(Clone)]
@@ -61,26 +63,28 @@ pub trait Manager {
   }
 
   fn allocate_aligned(&self, capacity: usize, resizable: bool) -> Result<BufferData> {
-    let spec = unsafe {
-      BufferSpec::new(Layout::from_size_align_unchecked(capacity, ALIGNMENT), resizable)
-    };
+    let spec =
+      unsafe { BufferSpec::new(Layout::from_size_align_unchecked(capacity, ALIGNMENT), resizable) };
     self.allocate(spec)
   }
 
   fn reallocate(&self, buffer: &BufferData, capacity: usize) -> Result<BufferData> {
     let new_capacity = bit_util::round_upto_multiple_of_64(capacity);
-      let new_capacity = cmp::max(new_capacity, buffer.capacity() * 2);
-      let new_data = memory::reallocate(buffer.as_ptr(), buffer.capacity(), new_capacity);
-      if !new_data.is_null() {
-        let new_spec = unsafe {
-          BufferSpec::new(Layout::from_size_align_unchecked(new_capacity, ALIGNMENT), buffer.spec().resizable())
-        };
-        Ok(BufferData::new(new_data, new_capacity, new_spec))
-      } else {
-        unsafe {
-          return Err(MemoryError(Layout::from_size_align_unchecked(new_capacity, ALIGNMENT)))?;
-        }
+    let new_capacity = cmp::max(new_capacity, buffer.capacity() * 2);
+    let new_data = memory::reallocate(buffer.as_ptr(), buffer.capacity(), new_capacity);
+    if !new_data.is_null() {
+      let new_spec = unsafe {
+        BufferSpec::new(
+          Layout::from_size_align_unchecked(new_capacity, ALIGNMENT),
+          buffer.spec().resizable(),
+        )
+      };
+      Ok(BufferData::new(new_data, new_capacity, new_spec))
+    } else {
+      unsafe {
+        return Err(MemoryError(Layout::from_size_align_unchecked(new_capacity, ALIGNMENT)))?;
       }
+    }
   }
 
   fn deallocate(&self, buffer: &BufferData) -> Result<()> {
@@ -107,11 +111,11 @@ pub(crate) struct CachedManager {
 impl CachedManager {
   pub(crate) fn new(root: BufferDataManagerRef) -> Self {
     let max_cached_num = 4;
-    Self { 
+    Self {
       root,
       max_cached_num,
       cached_fix_buffers: Mutex::new(Vec::with_capacity(max_cached_num)),
-      cached_var_len_buffers: Mutex::new(Vec::with_capacity(max_cached_num))
+      cached_var_len_buffers: Mutex::new(Vec::with_capacity(max_cached_num)),
     }
   }
 }
@@ -123,34 +127,29 @@ impl Manager for CachedManager {
     }
 
     if spec.resizable() {
-        match self.cached_fix_buffers.lock() {
-          Ok(mut buffers) => {
-           if let Some(idx) = buffers.iter().position(|b| b.capacity() == spec.layout().size()) {
-             Ok(buffers.remove(idx))
-           } else {
-             Manager::allocate(self, spec.clone())
-           }
+      match self.cached_fix_buffers.lock() {
+        Ok(mut buffers) => {
+          if let Some(idx) = buffers.iter().position(|b| b.capacity() == spec.layout().size()) {
+            Ok(buffers.remove(idx))
+          } else {
+            Manager::allocate(self, spec.clone())
           }
-          Err(_) => {
-            Err(FatalError("Mutex of fixed size buffer poisoned".to_string()))?
-          } 
         }
-      } else {
-        match self.cached_var_len_buffers.lock() {
-          Ok(mut buffers) => {
-           if let Some(idx) = buffers.iter().position(|b| b.capacity() >= spec.layout().size()) {
-             Ok(buffers.remove(idx))
-           } else {
-             Manager::allocate(self, spec.clone())
-           }
+        Err(_) => Err(FatalError("Mutex of fixed size buffer poisoned".to_string()))?,
+      }
+    } else {
+      match self.cached_var_len_buffers.lock() {
+        Ok(mut buffers) => {
+          if let Some(idx) = buffers.iter().position(|b| b.capacity() >= spec.layout().size()) {
+            Ok(buffers.remove(idx))
+          } else {
+            Manager::allocate(self, spec.clone())
           }
-          Err(_) => {
-            Err(FatalError("Mutex of var size buffer poisoned".to_string()))?
-          } 
         }
+        Err(_) => Err(FatalError("Mutex of var size buffer poisoned".to_string()))?,
       }
     }
-  
+  }
 
   fn deallocate(&self, buffer: &BufferData) -> Result<()> {
     let ptr = buffer.as_ptr();
@@ -163,10 +162,8 @@ impl Manager for CachedManager {
             } else {
               memory::free_aligned(ptr, buffer.capacity());
             }
-          },
-          Err(_) => {
-            Err(FatalError("Mutex of var size buffer poisoned".to_string()))?
-          } 
+          }
+          Err(_) => Err(FatalError("Mutex of var size buffer poisoned".to_string()))?,
         }
       } else {
         match self.cached_fix_buffers.lock() {
@@ -176,10 +173,8 @@ impl Manager for CachedManager {
             } else {
               memory::free_aligned(ptr, buffer.capacity());
             }
-          },
-          Err(_) => {
-            Err(FatalError("Mutex of fixed size buffer poisoned".to_string()))?
-          } 
+          }
+          Err(_) => Err(FatalError("Mutex of fixed size buffer poisoned".to_string()))?,
         }
       }
     }
