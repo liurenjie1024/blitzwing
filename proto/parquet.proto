@@ -35,7 +35,8 @@ message SegmentProto {
 message ColumnChunkProto {
   required string  column_name = 1;
   required int64   num_values = 2;
-  repeated SegmentProto segments = 3;
+  required ParquetProto.Compression compression = 3;
+  repeated SegmentProto segments = 4;
 }
 
 message RowGroupProto {
@@ -47,7 +48,6 @@ message ColumnDescProto {
   required int32   max_def_level = 2;
   required int32   type_length = 3;
   required ParquetProto.PhysicalType physical_type = 4;
-  required ParquetProto.Compression compression = 5;
 }
 
 message ParquetReaderProto {

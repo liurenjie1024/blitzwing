@@ -27,7 +27,8 @@ protobuf {
 sourceSets {
     main {
         java {
-            srcDir(file("build/generated/source/proto/main/java"))
+//            srcDir(file("build/generated/source/proto/main/java"))
+            srcDir(file("/Users/renliu/Workspace/blitzwing/blitzwing-common/build/generated/source/proto/main/java"))
         }
         proto {
             srcDir("${rootDir}/proto")

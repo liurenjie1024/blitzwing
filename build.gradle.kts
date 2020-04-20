@@ -5,19 +5,26 @@ val junitVersion = "4.12"
 val parquetVersion = "1.8.3-encryption-ebay0.1-SNAPSHOT"
 val arrowVersion = "0.15.1"
 val protobufVersion = "2.5.0"
+val parquet4sVersion = "1.0.0"
+
 
 val depScalaLang by project.extra("org.scala-lang:scala-library:${scalaVersion}")
 val depHadoopCommon by project.extra("org.apache.hadoop:hadoop-common:${hadoopVersion}")
 val depHadoopYarnApi by project.extra("org.apache.hadoop:hadoop-yarn-api:${hadoopVersion}")
 val depHadoopHdfs by project.extra("org.apache.hadoop:hadoop-hdfs:${hadoopVersion}")
+val depHadoopClient by project.extra("org.apache.hadoop:hadoop-client:${hadoopVersion}")
 val depParquetHadoop by project.extra("org.apache.parquet:parquet-hadoop:${parquetVersion}")
 val depParquetColumn by project.extra("org.apache.parquet:parquet-column:${parquetVersion}")
+val depParquetAvro by project.extra("org.apache.parquet:parquet-avro:${parquetVersion}")
 val depArrowVector by project.extra("org.apache.arrow:arrow-vector:${arrowVersion}")
 val depArrowMemory by project.extra("org.apache.arrow:arrow-memory:${arrowVersion}")
+val depParquet4s by project.extra("com.github.mjakubowski84:parquet4s_${scalaBinaryVersion}:${scalaVersion}")
+
 val depProtobuf by project.extra("com.google.protobuf:protobuf-java:${protobufVersion}")
+
 val depJunit by project.extra("junit:junit:${junitVersion}")
 
-val defProtobufVersion by project.extra("${protobufVersion}")
+val defProtobufVersion by project.extra(protobufVersion)
 
 
 allprojects {
@@ -40,3 +47,4 @@ allprojects {
         mavenCentral()
     }
 }
+

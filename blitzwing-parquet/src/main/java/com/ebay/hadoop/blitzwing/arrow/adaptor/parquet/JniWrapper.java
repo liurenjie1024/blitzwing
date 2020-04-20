@@ -1,13 +1,16 @@
 package com.ebay.hadoop.blitzwing.arrow.adaptor.parquet;
 
-import com.ebay.hadoop.blitzwing.generated.arrow.adaptor.parquet.ParquetProto.RowGroupProto;
+import com.ebay.hadoop.blitzwing.exception.BlitzwingException;
+import com.ebay.hadoop.blitzwing.generated.arrow.adaptor.parquet.ParquetProtoOuter.RowGroupProto;
 import com.ebay.hadoop.blitzwing.generated.vector.RecordBatchProto.JniRecordBatchProto;
+import com.ebay.hadoop.blitzwing.utils.JniUtils;
 import com.google.protobuf.InvalidProtocolBufferException;
+import java.io.IOException;
 
 public class JniWrapper implements AutoCloseable {
   private long instanceId;
 
-  public JniWrapper(long instanceId) {
+  JniWrapper(long instanceId) {
     this.instanceId = instanceId;
   }
 
@@ -37,14 +40,10 @@ public class JniWrapper implements AutoCloseable {
     }
   }
 
-  public static JniWrapper create(ParquetReaderOptions options) {
-    return new JniWrapper(newInstance(options.toParquetReaderProto().toByteArray()));
-  }
-
-  public native static long newInstance(byte[] parquetReaderProto);
-  public native static void setRowGroupData(long instanceId, byte[] rowGroupData);
-  public native static long next(long instanceId);
-  public native static byte[] collect(long instanceId);
-  public native static void freeBuffer(long instanceId, long address, int length);
-  public native static void close(long instanceId);
+  native static long newInstance(byte[] parquetReaderProto);
+  private native static void setRowGroupData(long instanceId, byte[] rowGroupData);
+  private native static long next(long instanceId);
+  private native static byte[] collect(long instanceId);
+  private native static void freeBuffer(long instanceId, long address, int length);
+  private native static void close(long instanceId);
 }

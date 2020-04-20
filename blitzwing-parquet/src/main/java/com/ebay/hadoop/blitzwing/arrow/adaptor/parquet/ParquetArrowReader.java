@@ -1,37 +1,36 @@
 package com.ebay.hadoop.blitzwing.arrow.adaptor.parquet;
 
 import com.ebay.hadoop.blitzwing.exception.BlitzwingException;
-import com.ebay.hadoop.blitzwing.generated.arrow.adaptor.parquet.ParquetProto.ChunkProto;
-import com.ebay.hadoop.blitzwing.generated.arrow.adaptor.parquet.ParquetProto.RowGroupProto;
-import com.ebay.hadoop.blitzwing.generated.arrow.adaptor.parquet.ParquetProto.SegmentProto;
-import com.ebay.hadoop.blitzwing.generated.vector.RecordBatchProto.JniRecordBatchProto;
+import com.ebay.hadoop.blitzwing.generated.arrow.adaptor.parquet.ParquetProtoOuter.ColumnChunkProto;
+import com.ebay.hadoop.blitzwing.generated.arrow.adaptor.parquet.ParquetProtoOuter.RowGroupProto;
+import com.ebay.hadoop.blitzwing.generated.arrow.adaptor.parquet.ParquetProtoOuter.SegmentProto;
 import com.ebay.hadoop.blitzwing.memory.MemoryManager;
 import com.ebay.hadoop.blitzwing.vector.RecordBatch;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Iterator;
-import java.util.Optional;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.ipc.ArrowReader;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.parquet.column.ColumnDescriptor;
+import org.apache.parquet.hadoop.ParquetFileReader;
 import org.apache.parquet.hadoop.blitzwing.RawChunkStore;
 import sun.nio.ch.DirectBuffer;
 
-public class ParquetReader extends ArrowReader implements MemoryManager, Iterator<RecordBatch> {
-  private final ParquetReaderOptions options;
-  private final Iterator<RawChunkStore> rawChunkStores;
+public class ParquetArrowReader extends ArrowReader implements MemoryManager, Iterator<RecordBatch> {
+  private final ParquetArrowReaderOptions options;
+  private final ParquetFileReader fileReader;
   private final JniWrapper jni;
 
   private boolean eof;
   private RecordBatch lastBatch;
 
-  public ParquetReader(Iterator<RawChunkStore> rawChunkStores, BufferAllocator allocator,
-      ParquetReaderOptions options, JniWrapper jni) {
+  public ParquetArrowReader(BufferAllocator allocator,
+      ParquetArrowReaderOptions options) {
     super(allocator);
-    this.rawChunkStores = rawChunkStores;
+    this.fileReader = options.getFileReader();
     this.options = options;
-    this.jni = jni;
+    this.jni = options.getJniWrapper();
 
     this.eof = false;
     this.lastBatch = null;
@@ -45,11 +44,12 @@ public class ParquetReader extends ArrowReader implements MemoryManager, Iterato
       totalLen += jni.next();
 
       if (totalLen < options.getBatchSize()) {
-        if (!rawChunkStores.hasNext()) {
+        RawChunkStore rawChunkStore = fileReader.readNextRawRowGroup();
+        if (rawChunkStore == null) {
           break;
         }
 
-        jni.setRowGroupData(toRowGroupProto(rawChunkStores.next()));
+        jni.setRowGroupData(toRowGroupProto(rawChunkStore));
       } else {
         break;
       }
@@ -82,7 +82,7 @@ public class ParquetReader extends ArrowReader implements MemoryManager, Iterato
     RowGroupProto.Builder rowGroup = RowGroupProto.newBuilder();
 
     for (ColumnDescriptor column: rawChunkStore.getColumns()) {
-      ChunkProto.Builder chunkProto = ChunkProto.newBuilder()
+      ColumnChunkProto.Builder chunkProto = ColumnChunkProto.newBuilder()
           .setColumnName(column.getPath()[0]);
 
       for(ByteBuffer byteBuffer: rawChunkStore.getChunk(column).getData()) {
@@ -98,7 +98,7 @@ public class ParquetReader extends ArrowReader implements MemoryManager, Iterato
         chunkProto.addSegments(segment);
       }
 
-      rowGroup.addChunks(chunkProto.build());
+      rowGroup.addColumns(chunkProto.build());
     }
 
     return rowGroup.build();
@@ -146,4 +146,47 @@ public class ParquetReader extends ArrowReader implements MemoryManager, Iterato
       throw new BlitzwingException(e);
     }
   }
+
+//  public static Iterator<RawChunkStore> fromParquetFileReader(ParquetFileReader fileReader) {
+//    return new Iterator<RawChunkStore>() {
+//      private boolean eof = false;
+//      private RawChunkStore last = null;
+//
+//      @Override
+//      public boolean hasNext() {
+//        if (last == null && !eof) {
+//          doNext();
+//        }
+//
+//        return eof;
+//      }
+//
+//      @Override
+//      public RawChunkStore next() {
+//        if (last == null && !eof) {
+//          doNext();
+//        }
+//
+//        if (last == null) {
+//          throw new NoSuchElementException();
+//        }
+//
+//        RawChunkStore ret = last;
+//
+//        last = null;
+//        return ret;
+//      }
+//
+//      private void doNext() {
+//        try {
+//          last = fileReader.readNextRawRowGroup();
+//          if (last == null) {
+//            eof = true;
+//          }
+//        } catch (Exception e) {
+//          throw new BlitzwingException(e);
+//        }
+//      }
+//    };
+//  }
 }

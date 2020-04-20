@@ -38,10 +38,6 @@ pub trait ArrayReader {
 pub(crate) type ArrayReaderRef = Box<dyn ArrayReader>;
 
 pub struct PrimitiveArrayReader<A, P>
-// where
-//   A: ArrowPrimitiveType,
-//   P: ParquetType,
-//   P::T: ArrowNativeType + num::Num,
 {
   arrow_data_buffer: Option<BufferBuilder<A>>,
   data_type: DataType,

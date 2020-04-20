@@ -27,10 +27,6 @@ pub(crate) struct RecordReaderBuffers<P, D> {
 }
 
 pub struct RecordReader<T, B, D>
-// where
-//   T: ParquetType,
-//   B: AsMut<[T::T]>,
-//   D: AsMut<[i16]>,
 {
   batch_size: usize,
   column_desc: ColumnDescProtoPtr,
@@ -93,19 +89,6 @@ where
       phantom_data: PhantomData,
     })
   }
-
-  // pub(crate) fn set_data(&mut self, page_reader: PageReaderRef) {
-  //     self.page_reader = page_reader;
-  //     self.num_buffered_values = 0;
-  //     self.num_decoded_values = 0;
-  // }
-
-  // pub(crate) fn reset_batch(&mut self) {
-  //   self.num_values = 0;
-  //   unsafe {
-  //     self.null_bitmap.finish_shared();
-  //   }
-  // }
 
   pub(crate) fn next_batch(&mut self) -> Result<()> {
     while self.num_values < self.batch_size {
@@ -177,18 +160,6 @@ where
 
     replace(&mut self.buffers, new_buffer)
   }
-
-  // pub(crate) fn parquet_data_mut(&mut self) -> &mut B {
-  //   &mut self.parquet_data_buffer
-  // }
-
-  // pub(crate) fn parquet_data(&self) -> &B {
-  //   &self.parquet_data_buffer
-  // }
-
-  // pub(crate) fn get_null_bitmap(&mut self) -> &mut BooleanBufferBuilder {
-  //   &mut self.null_bitmap
-  // }
 
   fn max_def_level(&self) -> i16 {
     self.column_desc.get_max_def_level() as i16
