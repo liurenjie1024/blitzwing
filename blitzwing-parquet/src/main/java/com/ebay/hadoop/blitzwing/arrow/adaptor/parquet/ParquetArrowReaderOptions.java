@@ -12,6 +12,7 @@ import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.parquet.Preconditions;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.hadoop.ParquetFileReader;
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
 
 public class ParquetArrowReaderOptions {
   private final int batchSize;
@@ -97,7 +98,7 @@ public class ParquetArrowReaderOptions {
             .setColumnName(field.getName())
             .setMaxDefLevel(c.getMaxDefinitionLevel())
             .setTypeLength(c.getTypeLength())
-            .setPhysicalType(PhysicalType.valueOf(c.getType().name()))
+            .setPhysicalType(fromPrimitiveType(c.getType()))
             .build();
 
         builder.addColumnDesc(columnDesc);
@@ -105,5 +106,19 @@ public class ParquetArrowReaderOptions {
 
       return builder.build();
     }
+  }
+
+  private static PhysicalType fromPrimitiveType(PrimitiveTypeName primitiveTypeName) {
+    PhysicalType physicalType;
+    switch(primitiveTypeName) {
+      case BINARY:
+        physicalType = PhysicalType.BYTE_ARRAY;
+        break;
+      default:
+        physicalType = PhysicalType.valueOf(primitiveTypeName.name());
+        break;
+    }
+
+    return physicalType;
   }
 }

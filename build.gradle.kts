@@ -19,16 +19,13 @@ val depParquetAvro by project.extra("org.apache.parquet:parquet-avro:${parquetVe
 val depArrowVector by project.extra("org.apache.arrow:arrow-vector:${arrowVersion}")
 val depArrowMemory by project.extra("org.apache.arrow:arrow-memory:${arrowVersion}")
 val depParquet4s by project.extra("com.github.mjakubowski84:parquet4s_${scalaBinaryVersion}:${scalaVersion}")
-
 val depProtobuf by project.extra("com.google.protobuf:protobuf-java:${protobufVersion}")
-
 val depJunit by project.extra("junit:junit:${junitVersion}")
 
 val defProtobufVersion by project.extra(protobufVersion)
 
-
 allprojects {
-    group = "org.example"
+    group = "com.ebay.hadoop"
     version = "1.0-SNAPSHOT"
 
     repositories {
@@ -48,3 +45,4 @@ allprojects {
     }
 }
 
+project.extra["profile"] = if (project.hasProperty("release")) "release" else "debug"
