@@ -5,8 +5,14 @@ import com.ebay.hadoop.blitzwing.generated.arrow.adaptor.parquet.ParquetProtoOut
 import com.ebay.hadoop.blitzwing.generated.arrow.adaptor.parquet.ParquetProtoOuter.ParquetProto.PhysicalType;
 import com.ebay.hadoop.blitzwing.generated.arrow.adaptor.parquet.ParquetProtoOuter.ParquetReaderProto;
 import com.ebay.hadoop.blitzwing.utils.JniUtils;
+import com.google.flatbuffers.FlatBufferBuilder;
 import com.google.protobuf.ByteString;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import org.apache.arrow.flatbuf.Message;
+import org.apache.arrow.flatbuf.MessageHeader;
+import org.apache.arrow.flatbuf.MetadataVersion;
+import org.apache.arrow.vector.ipc.message.MessageSerializer;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.parquet.Preconditions;
@@ -89,7 +95,7 @@ public class ParquetArrowReaderOptions {
     private ParquetReaderProto toParquetReaderProto() {
       ParquetReaderProto.Builder builder = ParquetReaderProto.newBuilder()
           .setBatchSize(batchSize)
-          .setSchema(ByteString.copyFrom(schema.toByteArray()));
+          .setSchema(ByteString.copyFrom(serializeSchema(schema)));
 
       for (Field field : schema.getFields()) {
         ColumnDescriptor c = fileReader.getFileMetaData().getSchema().getColumnDescription(new String[] { field.getName() });
@@ -120,5 +126,22 @@ public class ParquetArrowReaderOptions {
     }
 
     return physicalType;
+  }
+
+  private static byte[] serializeSchema(Schema schema) {
+    FlatBufferBuilder builder = new FlatBufferBuilder();
+    int schemaOffset = schema.getSchema(builder);
+
+    Message.startMessage(builder);
+    Message.addHeaderType(builder, MessageHeader.Schema);
+    Message.addHeader(builder, schemaOffset);
+    Message.addVersion(builder, MetadataVersion.V4);
+    Message.addBodyLength(builder, 0);
+    builder.finish(Message.endMessage(builder));
+
+    ByteBuffer bb = builder.dataBuffer();
+    byte[] bytes = new byte[bb.remaining()];
+    bb.get(bytes);
+    return bytes;
   }
 }

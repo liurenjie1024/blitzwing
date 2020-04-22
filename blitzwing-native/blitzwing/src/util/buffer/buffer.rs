@@ -17,7 +17,7 @@ use std::{
   sync::Arc,
 };
 
-#[derive(new, Clone, Eq, PartialEq)]
+#[derive(new, Clone, Eq, PartialEq, Debug)]
 pub struct BufferSpec {
   layout: Layout,
   // hint for allocator

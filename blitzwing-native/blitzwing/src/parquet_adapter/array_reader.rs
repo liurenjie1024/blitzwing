@@ -37,8 +37,7 @@ pub trait ArrayReader {
 
 pub(crate) type ArrayReaderRef = Box<dyn ArrayReader>;
 
-pub struct PrimitiveArrayReader<A, P>
-{
+pub struct PrimitiveArrayReader<A, P> {
   arrow_data_buffer: Option<BufferBuilder<A>>,
   data_type: DataType,
   record_reader: RecordReader<P, Buffer, Buffer>,
@@ -193,8 +192,6 @@ where
     )?;
 
     Ok(Self {
-      // arrow_data_buffer,
-      // arrow_offset_buffer,
       data_type,
       record_reader,
       buffer_manager,
@@ -290,7 +287,8 @@ where
   F: FnOnce() -> Result<B>,
 {
   let parquet_data_buffer = func()?;
-  let def_levels = buffer_manager.allocate_aligned(batch_size * size_of::<i16>(), false)?;
+  let mut def_levels = buffer_manager.allocate_aligned(batch_size * size_of::<i16>(), false)?;
+  def_levels.resize(batch_size * size_of::<i16>())?;
   let null_bitmap = BooleanBufferBuilder::new(batch_size, buffer_manager.clone())?;
 
   Ok(RecordReaderBuffers { parquet_data_buffer, def_levels, null_bitmap })

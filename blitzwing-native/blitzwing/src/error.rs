@@ -39,6 +39,8 @@ pub enum BlitzwingErrorKind {
   IllegalStateError(String),
   #[fail(display = "Lock poisoned")]
   LockPoisonError,
+  #[fail(display = "Log error")]
+  LogError,
 }
 
 impl BlitzwingError {

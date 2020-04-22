@@ -26,8 +26,7 @@ pub(crate) struct RecordReaderBuffers<P, D> {
   pub(super) null_bitmap: BooleanBufferBuilder,
 }
 
-pub struct RecordReader<T, B, D>
-{
+pub struct RecordReader<T, B, D> {
   batch_size: usize,
   column_desc: ColumnDescProtoPtr,
 

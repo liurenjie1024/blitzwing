@@ -8,6 +8,10 @@ extern crate failure_derive;
 extern crate jni;
 extern crate num;
 extern crate parquet;
+#[macro_use]
+extern crate log;
+extern crate log4rs;
+// extern crate flatbuffers;
 
 #[macro_use]
 pub mod error;

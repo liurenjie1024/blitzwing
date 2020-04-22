@@ -2,9 +2,11 @@ package com.ebay.hadoop.blitzwing.arrow.adaptor.parquet;
 
 import static org.apache.parquet.hadoop.ParquetFileWriter.Mode.OVERWRITE;
 import static org.apache.parquet.hadoop.metadata.CompressionCodecName.SNAPPY;
+import static org.junit.Assert.assertEquals;
 
 import com.google.common.collect.Lists;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.arrow.memory.RootAllocator;
@@ -64,5 +66,18 @@ public class ParquetArrowReaderTest {
     while (arrowReader.hasNext()) {
       System.out.println(arrowReader.next().getRowCount());
     }
+  }
+
+  @Test
+  public void schemaConversionTest() {
+    Field nameField = Field.nullable("name", MinorType.VARCHAR.getType());
+    Field ageField = Field.nullable("age", MinorType.INT.getType());
+    Schema arrowSchema = new Schema(Lists.newArrayList(nameField, ageField));
+
+    byte[] serSchema = arrowSchema.toByteArray();
+
+    Schema desSchema = Schema.deserialize(ByteBuffer.wrap(serSchema));
+
+    assertEquals(arrowSchema, desSchema);
   }
 }

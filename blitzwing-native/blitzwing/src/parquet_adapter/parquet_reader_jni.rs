@@ -9,14 +9,22 @@ use crate::{
 };
 use jni::{
   objects::JClass,
-  sys::{jbyteArray, jint, jlong},
-  JNIEnv,
+  sys::{jbyteArray, jint, jlong, JNI_VERSION_1_8},
+  JNIEnv, JavaVM,
 };
 use std::{
   convert::{identity, TryFrom},
   mem::transmute,
   ptr::null_mut,
 };
+
+#[no_mangle]
+pub extern "system" fn JNI_OnLoad(_jvm: JavaVM, _reserved: *mut u8) -> jint {
+  let path = "/Users/renliu/Workspace/blitzwing/blitzwing-native/blitzwing/log4rs/hdfs.yaml";
+  log4rs::init_file(path, Default::default()).expect("Log4rs initialization failed!");
+
+  JNI_VERSION_1_8
+}
 
 #[no_mangle]
 pub extern "system" fn Java_com_ebay_hadoop_blitzwing_arrow_adaptor_parquet_JniWrapper_newInstance(

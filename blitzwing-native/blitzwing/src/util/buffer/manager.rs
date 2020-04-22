@@ -143,7 +143,7 @@ impl Manager for CachedManager {
           if let Some(idx) = buffers.iter().position(|b| b.capacity() >= spec.layout().size()) {
             Ok(buffers.remove(idx))
           } else {
-            Manager::allocate(self, spec.clone())
+            self.root.allocate(spec)
           }
         }
         Err(_) => Err(FatalError("Mutex of var size buffer poisoned".to_string()))?,
@@ -171,7 +171,7 @@ impl Manager for CachedManager {
             if buffers.len() < self.max_cached_num {
               buffers.push(buffer.clone());
             } else {
-              memory::free_aligned(ptr, buffer.capacity());
+              self.root.deallocate(buffer)?;
             }
           }
           Err(_) => Err(FatalError("Mutex of fixed size buffer poisoned".to_string()))?,

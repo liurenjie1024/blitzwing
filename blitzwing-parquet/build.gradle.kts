@@ -2,6 +2,16 @@ plugins {
     java
 }
 
+tasks.register<Copy>("copyNativeToResources") {
+    val profile = if (rootProject.hasProperty("release")) "release" else "debug"
+    val sourceDir = "${rootDir}/blitzwing-native/target/${profile}"
+    val filename = System.mapLibraryName("blitzwing_rs")
+
+    from(sourceDir)
+    include(filename)
+    into("${projectDir}/src/main/resources/")
+    dependsOn(":blitzwing-native:build")
+}
 
 dependencies {
     implementation(project(":blitzwing-common"))
@@ -19,6 +29,7 @@ java {
     sourceCompatibility = JavaVersion.VERSION_1_8
     tasks.compileJava {
         options.compilerArgs.addAll(listOf("-h", file("build/generated/headers").absolutePath))
+        dependsOn("copyNativeToResources")
     }
     tasks.test {
         testLogging.showStandardStreams = true

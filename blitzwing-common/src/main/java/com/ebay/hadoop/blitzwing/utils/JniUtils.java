@@ -17,7 +17,7 @@ public class JniUtils {
   public static void loadLibraryFromJar(String libraryName)
       throws IOException {
     synchronized (JniUtils.class) {
-      if (loadedLibraries.contains(libraryName)) {
+      if (!loadedLibraries.contains(libraryName)) {
         final String libraryToLoad = System.mapLibraryName(libraryName);
         final File libraryFile = moveFileFromJarToTemp(
             System.getProperty("java.io.tmpdir"), libraryToLoad);

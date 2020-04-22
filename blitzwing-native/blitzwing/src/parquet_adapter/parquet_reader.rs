@@ -130,6 +130,7 @@ pub(crate) fn create_parquet_reader(meta: ParquetReaderProto) -> Result<ParquetR
   let root_manager = Arc::new(RootManager {});
 
   for column in meta.get_column_desc() {
+    debug!("Begin to create column column reader for {:?}", column);
     if let Some((_, field)) = schema.column_with_name(column.get_column_name()) {
       let column_desc = Rc::new(column.clone());
       let batch_size = meta.get_batch_size() as usize;
@@ -237,6 +238,7 @@ pub(crate) fn create_parquet_reader(meta: ParquetReaderProto) -> Result<ParquetR
         column.get_column_name()
       )))?;
     }
+    debug!("Finished creating column column reader for {:?}", column);
   }
 
   let buffers = HashMap::with_capacity(columns.len() * 3);
@@ -248,4 +250,99 @@ pub(crate) fn create_parquet_reader(meta: ParquetReaderProto) -> Result<ParquetR
     buffers,
     root_buffer_manager: root_manager,
   })
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::proto::parquet::{ColumnDescProto, ParquetProto_PhysicalType, ParquetReaderProto};
+  use arrow::{
+    datatypes::Schema,
+    ipc::{convert::schema_to_fb_offset, MessageBuilder, MessageHeader, MetadataVersion},
+  };
+  use flatbuffers::{FlatBufferBuilder, WIPOffset};
+  use serde_json::{self, Value};
+
+  fn serialize_schema(schema: &Schema) -> Vec<u8> {
+    let mut buffer = FlatBufferBuilder::new();
+
+    let offset = schema_to_fb_offset(&mut buffer, schema).value();
+
+    let mut message = MessageBuilder::new(&mut buffer);
+    message.add_version(MetadataVersion::V4);
+    message.add_bodyLength(0);
+    message.add_header(WIPOffset::new(offset));
+    message.add_header_type(MessageHeader::Schema);
+    let message_offset = message.finish();
+
+    buffer.finish(message_offset, None);
+
+    let (mut all, start) = buffer.collapse();
+    all.split_off(start)
+  }
+
+  fn create_column_desc_proto(
+    name: &str,
+    max_def_level: i32,
+    type_len: i32,
+    physical_type: ParquetProto_PhysicalType,
+  ) -> ColumnDescProto {
+    let mut ret = ColumnDescProto::new();
+    ret.set_column_name(name.to_string());
+    ret.set_max_def_level(max_def_level);
+    ret.set_type_length(type_len);
+    ret.set_physical_type(physical_type);
+
+    ret
+  }
+
+  #[test]
+  fn test_create_parquet_reader() {
+    let parquet_reader_proto = {
+      let mut proto = ParquetReaderProto::new();
+      proto.set_batch_size(1024);
+      proto.mut_column_desc().push(create_column_desc_proto(
+        "name",
+        1,
+        0,
+        ParquetProto_PhysicalType::BYTE_ARRAY,
+      ));
+      proto.mut_column_desc().push(create_column_desc_proto(
+        "age",
+        1,
+        0,
+        ParquetProto_PhysicalType::INT32,
+      ));
+
+      let schema_json = r#"{
+        "fields": [
+            {
+                "name": "name",
+                "nullable": true,
+                "type": {
+                    "name": "utf8"
+                },
+                "children": []
+            },
+            {
+                "name": "age",
+                "nullable": true,
+                "type": {
+                  "name": "int", 
+                  "isSigned": true, 
+                  "bitWidth": 32
+                },
+                "children": []
+            }
+        ]
+    }"#;
+      let value: Value = serde_json::from_str(&schema_json).unwrap();
+      let schema = Schema::from(&value).unwrap();
+      proto.set_schema(serialize_schema(&schema));
+
+      proto
+    };
+
+    create_parquet_reader(parquet_reader_proto).unwrap();
+  }
 }

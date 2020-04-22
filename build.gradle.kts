@@ -45,4 +45,3 @@ allprojects {
     }
 }
 
-project.extra["profile"] = if (project.hasProperty("release")) "release" else "debug"

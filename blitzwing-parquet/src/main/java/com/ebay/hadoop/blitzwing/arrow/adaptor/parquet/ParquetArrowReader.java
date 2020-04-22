@@ -130,7 +130,9 @@ public class ParquetArrowReader extends ArrowReader implements MemoryManager, It
       doNext();
     }
 
-    return lastBatch;
+    RecordBatch ret = lastBatch;
+    lastBatch = null;
+    return ret;
   }
 
   private void doNext() {
