@@ -298,7 +298,7 @@ mod tests {
 
   #[test]
   fn test_create_parquet_reader() {
-    let parquet_reader_proto = {
+    let (schema, parquet_reader_proto) = {
       let mut proto = ParquetReaderProto::new();
       proto.set_batch_size(1024);
       proto.mut_column_desc().push(create_column_desc_proto(
@@ -340,9 +340,10 @@ mod tests {
       let schema = Schema::from(&value).unwrap();
       proto.set_schema(serialize_schema(&schema));
 
-      proto
+      (schema, proto)
     };
 
-    create_parquet_reader(parquet_reader_proto).unwrap();
+    let parquet_reader = create_parquet_reader(parquet_reader_proto).unwrap();
+    assert_ne!(&schema, parquet_reader.schema.as_ref());
   }
 }

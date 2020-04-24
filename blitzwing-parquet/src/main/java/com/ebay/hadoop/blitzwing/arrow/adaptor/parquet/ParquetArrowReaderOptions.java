@@ -2,6 +2,7 @@ package com.ebay.hadoop.blitzwing.arrow.adaptor.parquet;
 
 import com.ebay.hadoop.blitzwing.exception.BlitzwingException;
 import com.ebay.hadoop.blitzwing.generated.arrow.adaptor.parquet.ParquetProtoOuter.ColumnDescProto;
+import com.ebay.hadoop.blitzwing.generated.arrow.adaptor.parquet.ParquetProtoOuter.ParquetProto.Compression;
 import com.ebay.hadoop.blitzwing.generated.arrow.adaptor.parquet.ParquetProtoOuter.ParquetProto.PhysicalType;
 import com.ebay.hadoop.blitzwing.generated.arrow.adaptor.parquet.ParquetProtoOuter.ParquetReaderProto;
 import com.ebay.hadoop.blitzwing.utils.JniUtils;
@@ -18,6 +19,7 @@ import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.parquet.Preconditions;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.hadoop.ParquetFileReader;
+import org.apache.parquet.hadoop.metadata.CompressionCodecName;
 import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName;
 
 public class ParquetArrowReaderOptions {
@@ -126,6 +128,10 @@ public class ParquetArrowReaderOptions {
     }
 
     return physicalType;
+  }
+
+  static Compression fromCompressionCodecName(CompressionCodecName codec) {
+    return Compression.valueOf(codec.name());
   }
 
   private static byte[] serializeSchema(Schema schema) {

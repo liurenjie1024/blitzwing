@@ -64,7 +64,9 @@ where
       batch_size,
       column_desc,
       create_record_reader_buffers::<P, _, Buffer>(batch_size, &buffer_manager, || {
-        buffer_manager.allocate_aligned(batch_size, false)
+        let mut buffer = buffer_manager.allocate_aligned(batch_size, false)?;
+        buffer.resize(batch_size)?;
+        Ok(buffer)
       })?,
       page_readers,
     )?;

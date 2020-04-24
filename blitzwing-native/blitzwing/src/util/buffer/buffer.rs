@@ -16,6 +16,7 @@ use std::{
   slice::{from_raw_parts, from_raw_parts_mut},
   sync::Arc,
 };
+use crate::util::buffer::manager::EmptyManager;
 
 #[derive(new, Clone, Eq, PartialEq, Debug)]
 pub struct BufferSpec {
@@ -117,6 +118,15 @@ impl Buffer {
   pub(super) fn with_capacity(capacity: usize, resizable: bool) -> Result<Self> {
     BufferManager::default().allocate_aligned(capacity, resizable)
   }
+
+  pub(crate) fn from_unowned(address: *mut u8, len: usize, capacity: usize) -> Result<Self> {
+    let buffer_data = BufferData::new(address, capacity, BufferSpec::default());
+    Ok(Self {
+      inner: buffer_data,
+      len,
+      manager: Arc::new(EmptyManager {})
+    })
+ }
 
   pub(super) fn new(inner: BufferData, manager: BufferDataManagerRef) -> Self {
     Self { inner, len: 0, manager }

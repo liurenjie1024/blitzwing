@@ -182,3 +182,15 @@ impl Manager for CachedManager {
     Ok(())
   }
 }
+
+pub(crate) struct EmptyManager {}
+
+impl Manager for EmptyManager {
+  fn allocate(&self, _: BufferSpec) -> Result<BufferData> {
+    Err(nyi!("Allocated not supported by empty manager!"))
+  }
+
+  fn deallocate(&self, _: &BufferData) -> Result<()> {
+    Ok(())
+  }
+}

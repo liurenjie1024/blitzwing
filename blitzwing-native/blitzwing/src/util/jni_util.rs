@@ -3,7 +3,7 @@ use crate::error::{
   BlitzwingErrorKind::{JniError, NullPointerError, ProtobufError},
   Result,
 };
-use failure::ResultExt;
+use failure::{ResultExt, Fail};
 use jni::{
   sys::{jbyteArray, jlong},
   JNIEnv,
@@ -14,7 +14,7 @@ use std::{mem::transmute, ptr::NonNull};
 pub(crate) fn throw_exception(env: JNIEnv, e: BlitzwingError) -> () {
   match env.throw_new(
     "com/ebay/hadoop/blitzwing/exception/BlitzwingException",
-    format!("Failed to build executor: {:?}", e),
+    format!("Failed to build executor: {:?}, back trace is: {:?}", e, e.backtrace()),
   ) {
     Err(e) => eprintln!("Failed to throw exception: {}", e),
     _ => (),

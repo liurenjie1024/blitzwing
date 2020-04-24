@@ -1,7 +1,6 @@
 pub(crate) mod buffer;
 pub(crate) mod builder;
 pub(crate) mod manager;
-pub(crate) mod ops;
 
 pub(crate) use buffer::{Buffer, BufferData};
 pub(crate) use builder::{BooleanBufferBuilder, BufferBuilder, BufferBuilderTrait};
