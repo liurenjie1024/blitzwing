@@ -19,6 +19,7 @@ derive-new = "0.5"
 num = "0.2"
 log = { version = "0.4", features = ["std"] }
 log4rs = "0.9"
+arraydeque = "0.4.5"
 
 [dev-dependencies]
 flatbuffers = "0.6"

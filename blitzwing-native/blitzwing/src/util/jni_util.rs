@@ -3,7 +3,7 @@ use crate::error::{
   BlitzwingErrorKind::{JniError, NullPointerError, ProtobufError},
   Result,
 };
-use failure::{ResultExt, Fail};
+use failure::{Fail, ResultExt};
 use jni::{
   sys::{jbyteArray, jlong},
   JNIEnv,

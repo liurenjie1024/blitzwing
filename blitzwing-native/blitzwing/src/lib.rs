@@ -10,6 +10,7 @@ extern crate num;
 extern crate parquet;
 #[macro_use]
 extern crate log;
+extern crate arraydeque;
 extern crate log4rs;
 // extern crate flatbuffers;
 

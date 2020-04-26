@@ -59,16 +59,15 @@ pub(crate) fn segment_to_buffer(segment: &SegmentProto) -> Result<Buffer> {
 
 #[cfg(test)]
 mod tests {
-  use crate::proto::parquet::{ColumnChunkProto, ParquetProto_Compression, SegmentProto};
-  use std::mem::size_of;
   use super::column_chunk_to_read;
-  use std::io::Read;
+  use crate::proto::parquet::{ColumnChunkProto, ParquetProto_Compression, SegmentProto};
+  use std::{io::Read, mem::size_of};
 
   fn vec_to_seg<T>(v: &mut Vec<T>) -> SegmentProto {
-      let mut seg = SegmentProto::new();
-      seg.set_address(v.as_mut_ptr() as i64);
-      seg.set_length((v.len() * size_of::<T>()) as i32);
-      seg
+    let mut seg = SegmentProto::new();
+    seg.set_address(v.as_mut_ptr() as i64);
+    seg.set_length((v.len() * size_of::<T>()) as i32);
+    seg
   }
 
   #[test]
@@ -89,7 +88,7 @@ mod tests {
     let mut reader = column_chunk_to_read(&column_chunk_proto).unwrap();
     let mut buffer = Vec::new();
     reader.read_to_end(&mut buffer).unwrap();
-    
+
     let mut raw_data = Vec::new();
     raw_data.append(&mut v1.clone());
     raw_data.append(&mut v2.clone());

@@ -3,6 +3,7 @@ use crate::error::{
   BlitzwingErrorKind::{FatalError, InvalidArgumentError, LayoutError, MemoryError},
   Result,
 };
+use arraydeque::{ArrayDeque, Wrapping};
 use arrow::{memory, memory::ALIGNMENT, util::bit_util};
 use failure::ResultExt;
 use std::{
@@ -104,8 +105,8 @@ impl Manager for RootManager {}
 pub(crate) struct CachedManager {
   root: BufferDataManagerRef,
   max_cached_num: usize,
-  cached_fix_buffers: Mutex<Vec<BufferData>>,
-  cached_var_len_buffers: Mutex<Vec<BufferData>>,
+  cached_fix_buffers: Mutex<ArrayDeque<[BufferData; 4], Wrapping>>,
+  cached_var_len_buffers: Mutex<ArrayDeque<[BufferData; 4], Wrapping>>,
 }
 
 impl CachedManager {
@@ -114,8 +115,8 @@ impl CachedManager {
     Self {
       root,
       max_cached_num,
-      cached_fix_buffers: Mutex::new(Vec::with_capacity(max_cached_num)),
-      cached_var_len_buffers: Mutex::new(Vec::with_capacity(max_cached_num)),
+      cached_fix_buffers: Mutex::new(ArrayDeque::new()),
+      cached_var_len_buffers: Mutex::new(ArrayDeque::new()),
     }
   }
 }
@@ -126,13 +127,15 @@ impl Manager for CachedManager {
       return Err(InvalidArgumentError(format!("Buffer alignment must be {}", ALIGNMENT)))?;
     }
 
-    if spec.resizable() {
+    if !spec.resizable() {
       match self.cached_fix_buffers.lock() {
         Ok(mut buffers) => {
           if let Some(idx) = buffers.iter().position(|b| b.capacity() == spec.layout().size()) {
-            Ok(buffers.remove(idx))
+            buffers
+              .remove(idx)
+              .ok_or_else(|| FatalError(format!("{} element should exist!", idx)).into())
           } else {
-            Manager::allocate(self, spec.clone())
+            self.root.allocate(spec.clone())
           }
         }
         Err(_) => Err(FatalError("Mutex of fixed size buffer poisoned".to_string()))?,
@@ -141,7 +144,9 @@ impl Manager for CachedManager {
       match self.cached_var_len_buffers.lock() {
         Ok(mut buffers) => {
           if let Some(idx) = buffers.iter().position(|b| b.capacity() >= spec.layout().size()) {
-            Ok(buffers.remove(idx))
+            buffers
+              .remove(idx)
+              .ok_or_else(|| FatalError(format!("{} element should exist!", idx)).into())
           } else {
             self.root.allocate(spec)
           }
@@ -154,32 +159,48 @@ impl Manager for CachedManager {
   fn deallocate(&self, buffer: &BufferData) -> Result<()> {
     let ptr = buffer.as_ptr();
     if !ptr.is_null() {
-      if buffer.spec().resizable() {
-        match self.cached_var_len_buffers.lock() {
-          Ok(mut buffers) => {
-            if buffers.len() < self.max_cached_num {
-              buffers.push(buffer.clone());
-            } else {
-              memory::free_aligned(ptr, buffer.capacity());
-            }
-          }
-          Err(_) => Err(FatalError("Mutex of var size buffer poisoned".to_string()))?,
-        }
+      let locked_buffers = if buffer.spec().resizable() {
+        &self.cached_var_len_buffers
       } else {
-        match self.cached_fix_buffers.lock() {
-          Ok(mut buffers) => {
-            if buffers.len() < self.max_cached_num {
-              buffers.push(buffer.clone());
-            } else {
-              self.root.deallocate(buffer)?;
+        &self.cached_fix_buffers
+      };
+
+      match locked_buffers.lock() {
+        Ok(mut buffers) => {
+          if buffers.iter().position(|b| b == buffer).is_none() {
+            if let Some(buffer_data) = buffers.push_back(buffer.clone()) {
+              self.root.deallocate(&buffer_data)?
             }
           }
-          Err(_) => Err(FatalError("Mutex of fixed size buffer poisoned".to_string()))?,
         }
+        Err(_) => Err(FatalError("Mutex of var size buffer poisoned".to_string()))?,
       }
     }
-
     Ok(())
+  }
+}
+
+impl CachedManager {
+  fn do_free_buffer(&self, buffer_data: &BufferData) -> Result<()> {
+    self.root.deallocate(buffer_data)
+  }
+}
+
+impl Drop for CachedManager {
+  fn drop(&mut self) {
+    if let Ok(mut buffers) = self.cached_fix_buffers.lock() {
+      for b in buffers.iter() {
+        self.do_free_buffer(b).unwrap();
+      }
+      buffers.clear();
+    }
+
+    if let Ok(mut buffers) = self.cached_var_len_buffers.lock() {
+      for b in buffers.iter() {
+        self.do_free_buffer(b).unwrap();
+      }
+      buffers.clear();
+    }
   }
 }
 
@@ -192,5 +213,77 @@ impl Manager for EmptyManager {
 
   fn deallocate(&self, _: &BufferData) -> Result<()> {
     Ok(())
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use std::sync::Arc;
+  #[test]
+  fn test_cached_manager_fixed() {
+    let root = Arc::new(RootManager {});
+
+    let cached_manager = CachedManager::new(root);
+
+    // Frist allocate fixed size buffer
+    let buffer1 = cached_manager.allocate_aligned(64, false).unwrap();
+    let buffer2 = cached_manager.allocate_aligned(128, false).unwrap();
+    let buffer3 = cached_manager.allocate_aligned(256, false).unwrap();
+    let buffer4 = cached_manager.allocate_aligned(512, false).unwrap();
+
+    cached_manager.deallocate(&buffer1).unwrap();
+    cached_manager.deallocate(&buffer2).unwrap();
+    cached_manager.deallocate(&buffer3).unwrap();
+    cached_manager.deallocate(&buffer4).unwrap();
+
+    assert_eq!(buffer1, cached_manager.allocate_aligned(64, false).unwrap());
+    assert_eq!(buffer2, cached_manager.allocate_aligned(128, false).unwrap());
+    assert_eq!(buffer3, cached_manager.allocate_aligned(256, false).unwrap());
+    assert_eq!(buffer4, cached_manager.allocate_aligned(512, false).unwrap());
+
+    assert!(cached_manager.allocate_aligned(1024, false).is_ok());
+  }
+
+  #[test]
+  fn test_cached_manager_resizable() {
+    let root = Arc::new(RootManager {});
+
+    let cached_manager = CachedManager::new(root);
+
+    // Frist allocate fixed size buffer
+    let buffer1 = cached_manager.allocate_aligned(63, true).unwrap();
+    let buffer2 = cached_manager.allocate_aligned(127, true).unwrap();
+    let buffer3 = cached_manager.allocate_aligned(255, true).unwrap();
+    let buffer4 = cached_manager.allocate_aligned(511, true).unwrap();
+
+    cached_manager.deallocate(&buffer1).unwrap();
+    cached_manager.deallocate(&buffer2).unwrap();
+    cached_manager.deallocate(&buffer3).unwrap();
+    cached_manager.deallocate(&buffer4).unwrap();
+
+    assert_eq!(buffer1, cached_manager.allocate_aligned(63, true).unwrap());
+    assert_eq!(buffer2, cached_manager.allocate_aligned(127, true).unwrap());
+    assert_eq!(buffer3, cached_manager.allocate_aligned(255, true).unwrap());
+    assert_eq!(buffer4, cached_manager.allocate_aligned(511, true).unwrap());
+
+    assert!(cached_manager.allocate_aligned(1023, true).is_ok());
+  }
+
+  #[test]
+  fn test_cached_manager_drop() {
+    let root = Arc::new(RootManager {});
+
+    let cached_manager = CachedManager::new(root);
+
+    let buffer1 = cached_manager.allocate_aligned(63, true).unwrap();
+    let buffer2 = cached_manager.allocate_aligned(128, false).unwrap();
+
+    cached_manager.deallocate(&buffer1).unwrap();
+    cached_manager.deallocate(&buffer2).unwrap();
+    cached_manager.deallocate(&buffer1).unwrap();
+    cached_manager.deallocate(&buffer2).unwrap();
+
+    // Should not panic when droppped
   }
 }

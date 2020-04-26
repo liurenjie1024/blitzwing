@@ -6,13 +6,13 @@ public class Person {
 
   private String name;
   private Integer age;
+  private Long hairCount;
 
-  public Person() {
-  }
 
-  public Person(String name, Integer age) {
+  public Person(String name, Integer age, Long hairCount) {
     this.name = name;
     this.age = age;
+    this.hairCount = hairCount;
   }
 
   public String getName() {
@@ -21,6 +21,10 @@ public class Person {
 
   public Integer getAge() {
     return age;
+  }
+
+  public Long getHairCount() {
+    return hairCount;
   }
 
   @Override
@@ -38,11 +42,12 @@ public class Person {
     }
     Person person = (Person) o;
     return Objects.equals(getAge(), person.getAge()) &&
-        Objects.equals(getName(), person.getName());
+        Objects.equals(getName(), person.getName()) &&
+        Objects.equals(getHairCount(), person.getHairCount());
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(getName(), getAge());
+    return Objects.hash(getName(), getAge(), getHairCount());
   }
 }

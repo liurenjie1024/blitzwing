@@ -1,5 +1,8 @@
 use super::manager::{BufferDataManagerRef, BufferManager, RootManager};
-use crate::error::{BlitzwingError, BlitzwingErrorKind::MemoryError, Result};
+use crate::{
+  error::{BlitzwingError, BlitzwingErrorKind::MemoryError, Result},
+  util::buffer::manager::EmptyManager,
+};
 use arrow::{
   buffer::Buffer as ArrowBuffer, datatypes::ArrowNativeType, memory, memory::ALIGNMENT,
   util::bit_util,
@@ -16,7 +19,6 @@ use std::{
   slice::{from_raw_parts, from_raw_parts_mut},
   sync::Arc,
 };
-use crate::util::buffer::manager::EmptyManager;
 
 #[derive(new, Clone, Eq, PartialEq, Debug)]
 pub struct BufferSpec {
@@ -45,7 +47,7 @@ impl BufferSpec {
   }
 }
 
-#[derive(Clone, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct BufferData {
   ptr: *mut u8,
   capacity: usize,
@@ -57,6 +59,14 @@ impl Default for BufferData {
     Self { ptr: null_mut(), capacity: 0, spec: BufferSpec::default() }
   }
 }
+
+impl PartialEq for BufferData {
+  fn eq(&self, other: &Self) -> bool {
+    (self.ptr == other.ptr) && (self.capacity == other.capacity)
+  }
+}
+
+impl Eq for BufferData {}
 
 pub struct Buffer {
   inner: BufferData,
@@ -121,12 +131,8 @@ impl Buffer {
 
   pub(crate) fn from_unowned(address: *mut u8, len: usize, capacity: usize) -> Result<Self> {
     let buffer_data = BufferData::new(address, capacity, BufferSpec::default());
-    Ok(Self {
-      inner: buffer_data,
-      len,
-      manager: Arc::new(EmptyManager {})
-    })
- }
+    Ok(Self { inner: buffer_data, len, manager: Arc::new(EmptyManager {}) })
+  }
 
   pub(super) fn new(inner: BufferData, manager: BufferDataManagerRef) -> Self {
     Self { inner, len: 0, manager }

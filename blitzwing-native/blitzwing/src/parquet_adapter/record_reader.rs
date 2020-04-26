@@ -5,7 +5,7 @@ use crate::{
   },
   types::ColumnDescProtoPtr,
   util::{
-    buffer::BooleanBufferBuilder,
+    buffer::{BooleanBufferBuilder, BufferBuilderTrait},
     reader::{PageReaderIteratorRef, PageReaderRef},
   },
 };
@@ -19,7 +19,6 @@ use parquet::{
   memory::ByteBufferPtr,
 };
 use std::{cmp::min, collections::HashMap, marker::PhantomData, mem::replace};
-use crate::util::buffer::BufferBuilderTrait;
 
 pub(crate) struct RecordReaderBuffers<P, D> {
   pub(super) parquet_data_buffer: P,

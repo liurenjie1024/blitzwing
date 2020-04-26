@@ -64,8 +64,9 @@ where
       batch_size,
       column_desc,
       create_record_reader_buffers::<P, _, Buffer>(batch_size, &buffer_manager, || {
-        let mut buffer = buffer_manager.allocate_aligned(batch_size, false)?;
-        buffer.resize(batch_size)?;
+        let buffer_size = batch_size * P::get_type_size();
+        let mut buffer = buffer_manager.allocate_aligned(buffer_size, false)?;
+        buffer.resize(buffer_size)?;
         Ok(buffer)
       })?,
       page_readers,
@@ -111,7 +112,12 @@ where
       self.record_reader.collect_buffers(create_record_reader_buffers::<P, _, Buffer>(
         self.batch_size,
         &self.buffer_manager,
-        || self.buffer_manager.allocate_aligned(self.batch_size, false),
+        || {
+          let buffer_size = self.batch_size * P::get_type_size();
+          let mut buffer = self.buffer_manager.allocate_aligned(buffer_size, false)?;
+          buffer.resize(buffer_size)?;
+          Ok(buffer)
+        },
       )?);
 
     let mut array_data =
@@ -232,7 +238,10 @@ where
       },
     )?);
 
-    debug!("Data type: {:?}, values read: {:?}, null count: {:?}, record buffers: {:?}", self.data_type, values_read, null_count, buffers.parquet_data_buffer);
+    debug!(
+      "Data type: {:?}, values read: {:?}, null count: {:?}, record buffers: {:?}",
+      self.data_type, values_read, null_count, buffers.parquet_data_buffer
+    );
 
     let mut array_data =
       ArrayDataBuilder::new(self.data_type.clone()).len(values_read).null_count(null_count);
@@ -242,7 +251,6 @@ where
     arrow_data_buffer.resize(data_len)?;
     let mut arrow_offset_buffer =
       Int32BufferBuilder::new(self.batch_size + 1, self.buffer_manager.clone())?;
-    // self.arrow_data_buffer.resize(data_len).context(ArrowError)?;
 
     let mut start: usize = 0;
     let arrow_data = arrow_data_buffer.as_mut();
