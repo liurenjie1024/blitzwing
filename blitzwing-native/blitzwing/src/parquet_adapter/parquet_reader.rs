@@ -138,7 +138,8 @@ pub(crate) fn create_parquet_reader(meta: ParquetReaderProto) -> Result<ParquetR
 
       let page_reader_iter: PageReaderIteratorRef = Box::new(page_readers.clone().into_iterator());
       let column_desc_ptr = column_desc.clone();
-      let buffer_data_manager = Arc::new(CachedManager::new(root_manager.clone()));
+      // let buffer_data_manager = Arc::new(CachedManager::new(root_manager.clone()));
+      let buffer_data_manager = root_manager.clone();
       let buffer_manager = BufferManager::new(buffer_data_manager.clone());
 
       let array_reader: ArrayReaderRef =

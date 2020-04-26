@@ -3,13 +3,21 @@ package com.ebay.hadoop.blitzwing.arrow.adaptor.parquet;
 import static org.apache.parquet.hadoop.ParquetFileWriter.Mode.OVERWRITE;
 import static org.apache.parquet.hadoop.metadata.CompressionCodecName.SNAPPY;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
+import com.ebay.hadoop.blitzwing.vector.RecordBatch;
 import com.google.common.collect.Lists;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import org.apache.arrow.memory.RootAllocator;
+import org.apache.arrow.vector.FieldVector;
+import org.apache.arrow.vector.IntVector;
+import org.apache.arrow.vector.VarCharVector;
+import org.apache.arrow.vector.holders.NullableVarCharHolder;
 import org.apache.arrow.vector.types.Types.MinorType;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.Schema;
@@ -26,11 +34,11 @@ public class ParquetArrowReaderTest {
   @Test
   public void testReadIntoArrow() throws IOException {
     List<Person> personList = new ArrayList<>();
-    personList.add(new Person("Alice", 1));
-    personList.add(new Person("Amy", 3));
+    personList.add(new Person(null, 1));
+    personList.add(new Person("Amy", null));
     personList.add(new Person("Bob", 20));
-    personList.add(new Person("Blare", 14));
-    personList.add(new Person("Beep", 5));
+    personList.add(new Person(null, null));
+    personList.add(new Person("Beep", null));
 
     Path dataFile = new Path("/tmp/demo.snappy.parquet");
 
@@ -63,9 +71,41 @@ public class ParquetArrowReaderTest {
 
     ParquetArrowReader arrowReader = new ParquetArrowReader(new RootAllocator(), options);
 
-    while (arrowReader.hasNext()) {
-      System.out.println(arrowReader.next().getRowCount());
+    // Check first batch
+    assertTrue(arrowReader.hasNext());
+    RecordBatch recordBatch = arrowReader.next();
+    assertEquals(personList.size(), recordBatch.getRowCount());
+
+    VarCharVector names = checkByFieldName(recordBatch.getColumns(), "name", VarCharVector.class);
+    IntVector ages = checkByFieldName(recordBatch.getColumns(), "age", IntVector.class);
+
+    List<Person> returned = new ArrayList<>();
+    for (int i=0; i<recordBatch.getRowCount(); i++) {
+      String name = null;
+      if (!names.isNull(i)) {
+        name = names.getObject(i).toString();
+      }
+
+      Integer age = null;
+      if (!ages.isNull(i)) {
+        age = ages.getObject(i);
+      }
+      returned.add(new Person(name, age));
     }
+
+    assertEquals(personList, returned);
+
+    assertFalse(arrowReader.hasNext());
+  }
+
+  private static <T> T checkByFieldName(List<FieldVector> vectors, String fieldName, Class<T> klass) {
+    Optional<FieldVector> result = vectors.stream().filter(v -> v.getField().getName().equals(fieldName))
+        .findFirst();
+    assertTrue(fieldName + " not found in vectors!", result.isPresent());
+    FieldVector vector = result.get();
+
+    assertTrue(fieldName + " 's type is not " + klass.getCanonicalName(), klass.isInstance(vector));
+    return klass.cast(vector);
   }
 
   @Test

@@ -232,11 +232,14 @@ where
       },
     )?);
 
+    debug!("Data type: {:?}, values read: {:?}, null count: {:?}, record buffers: {:?}", self.data_type, values_read, null_count, buffers.parquet_data_buffer);
+
     let mut array_data =
       ArrayDataBuilder::new(self.data_type.clone()).len(values_read).null_count(null_count);
 
     let data_len = (&buffers.parquet_data_buffer[0..values_read]).iter().map(|b| b.len()).sum();
     let mut arrow_data_buffer = self.buffer_manager.allocate_aligned(data_len, true)?;
+    arrow_data_buffer.resize(data_len)?;
     let mut arrow_offset_buffer =
       Int32BufferBuilder::new(self.batch_size + 1, self.buffer_manager.clone())?;
     // self.arrow_data_buffer.resize(data_len).context(ArrowError)?;

@@ -110,7 +110,7 @@ public class ParquetArrowReader extends ArrowReader implements MemoryManager, It
         chunkProto.addSegments(segment);
       }
 
-      printRawData(rawChunk.getData());
+//      printRawData(rawChunk.getData());
       rowGroup.addColumns(chunkProto.build());
     }
 
@@ -150,6 +150,7 @@ public class ParquetArrowReader extends ArrowReader implements MemoryManager, It
 
   private void doNext() {
     try {
+      ensureInitialized();
       lastBatch = null;
       boolean loaded = loadNextBatch();
       if (!loaded) {
@@ -162,6 +163,7 @@ public class ParquetArrowReader extends ArrowReader implements MemoryManager, It
     }
   }
 
+  // For test
   private static void printRawData(List<ByteBuffer> rawData) {
     StringJoiner joiner = new StringJoiner(",", "[", "]");
     System.out.print("Raw data: ");

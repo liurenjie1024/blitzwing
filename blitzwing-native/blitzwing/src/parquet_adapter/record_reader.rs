@@ -19,6 +19,7 @@ use parquet::{
   memory::ByteBufferPtr,
 };
 use std::{cmp::min, collections::HashMap, marker::PhantomData, mem::replace};
+use crate::util::buffer::BufferBuilderTrait;
 
 pub(crate) struct RecordReaderBuffers<P, D> {
   pub(super) parquet_data_buffer: P,
@@ -112,11 +113,11 @@ where
             break;
           }
 
-          let is_empty = self.buffers.def_levels.as_mut()[cur_idx] >= self.max_def_level();
+          let is_empty = self.buffers.def_levels.as_mut()[cur_idx] < self.max_def_level();
 
           let mut end_idx_tmp = cur_idx + 1;
           while end_idx_tmp < end_idx
-            && ((self.buffers.def_levels.as_mut()[end_idx_tmp] >= self.max_def_level()) == is_empty)
+            && ((self.buffers.def_levels.as_mut()[end_idx_tmp] < self.max_def_level()) == is_empty)
           {
             end_idx_tmp += 1;
           }
@@ -126,6 +127,11 @@ where
           } else {
             iter_num_nulls += end_idx_tmp - cur_idx;
           }
+
+          for _ in cur_idx..end_idx_tmp {
+            self.buffers.null_bitmap.append(!is_empty)?;
+          }
+
           cur_idx = end_idx_tmp;
         }
       } else {

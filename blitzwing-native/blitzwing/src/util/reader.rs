@@ -22,13 +22,7 @@ pub(crate) fn create_page_reader(
   column_chunk: &ColumnChunkProto,
 ) -> Result<impl PageReader> {
   debug!("Column desc: {:?}, column chunk: {:?}", column_desc, column_chunk);
-  let mut reader = column_chunk_to_read(column_chunk)?;
-
-  // {
-  //   let mut content = Vec::new();
-  //   reader.read_to_end(&mut content).unwrap();
-  //   debug!("Content is: {:?}", &content);
-  // }
+  let reader = column_chunk_to_read(column_chunk)?;
 
   let num_values = column_chunk.get_num_values();
   let compression = column_chunk.get_compression().try_into()?;
