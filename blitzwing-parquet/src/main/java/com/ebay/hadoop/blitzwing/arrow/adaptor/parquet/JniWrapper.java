@@ -25,7 +25,7 @@ public class JniWrapper implements AutoCloseable {
   }
 
   public void freeBuffer(long address, int length) {
-    System.out.println("Freeing buffer: " + address + ", " + length);
+//    System.out.println("Freeing buffer: " + address + ", " + length);
     freeBuffer(instanceId, address, length);
   }
 

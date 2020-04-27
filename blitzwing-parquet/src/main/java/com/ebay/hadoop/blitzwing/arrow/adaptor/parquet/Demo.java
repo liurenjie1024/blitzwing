@@ -40,10 +40,20 @@ public class Demo {
         .withSchema(arrowSchema)
         .build();
 
+    for (int i=0; i<10; i++) {
+      long current = System.nanoTime();
+      try {
+        run(options);
+      } catch (Exception e) {
+        System.out.println("It takes " + (System.nanoTime()-current) + "nano seconds"); ;
+      }
+    }
+  }
+
+  private static void run(ParquetArrowReaderOptions options) throws Exception {
     ParquetArrowReader arrowReader = new ParquetArrowReader(new RootAllocator(), options);
     while (arrowReader.hasNext()) {
       RecordBatch recordBatch = arrowReader.next();
-      System.out.println("Current row count: " + recordBatch.getRowCount());
       recordBatch.close();
     }
   }
