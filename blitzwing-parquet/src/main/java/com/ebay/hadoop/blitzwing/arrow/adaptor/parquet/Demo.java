@@ -4,7 +4,9 @@ import com.ebay.hadoop.blitzwing.vector.RecordBatch;
 import com.google.common.collect.Lists;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.BigIntVector;
 import org.apache.arrow.vector.IntVector;
@@ -18,12 +20,19 @@ import org.apache.parquet.hadoop.ParquetFileReader;
 
 public class Demo {
   public static void main(String[] args) throws Exception {
-    ParquetFileReader parquetFileReader = ParquetFileReader.open(new Configuration(), new Path(args[1]));
+    ParquetFileReader parquetFileReader = ParquetFileReader.open(new Configuration(), new Path(args[0]));
 
-    Field nameField = Field.nullable("name", MinorType.VARCHAR.getType());
-    Field ageField = Field.nullable("age", MinorType.INT.getType());
-    Field hairCountField = Field.nullable("hairCount", MinorType.BIGINT.getType());
-    Schema arrowSchema = new Schema(Lists.newArrayList(nameField, ageField, hairCountField));
+    Map<String, MinorType> fields = new HashMap<>();
+    fields.put("item_id", MinorType.BIGINT);
+    fields.put("auct_end_dt", MinorType.INT);
+    fields.put("variation_id", MinorType.BIGINT);
+
+    List<Field> fieldList = new ArrayList<>(fields.size());
+    for (String filedName: fields.keySet()) {
+      fieldList.add(Field.nullable(filedName, fields.get(filedName).getType()));
+    }
+
+    Schema arrowSchema = new Schema(fieldList);
 
     ParquetArrowReaderOptions options = ParquetArrowReaderOptions.newBuilder()
         .withBatchSize(4096)
