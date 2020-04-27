@@ -10,12 +10,16 @@ import com.google.flatbuffers.FlatBufferBuilder;
 import com.google.protobuf.ByteString;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.apache.arrow.flatbuf.Message;
 import org.apache.arrow.flatbuf.MessageHeader;
 import org.apache.arrow.flatbuf.MetadataVersion;
 import org.apache.arrow.vector.ipc.message.MessageSerializer;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.Schema;
+import org.apache.hadoop.util.hash.Hash;
 import org.apache.parquet.Preconditions;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.hadoop.ParquetFileReader;
@@ -27,6 +31,7 @@ public class ParquetArrowReaderOptions {
   private final Schema schema;
   private final ParquetFileReader fileReader;
   private final JniWrapper jniWrapper;
+  private final Set<String> columnNames;
 
   private ParquetArrowReaderOptions(int batchSize, Schema schema,
       ParquetFileReader fileReader,
@@ -35,6 +40,7 @@ public class ParquetArrowReaderOptions {
     this.schema = schema;
     this.fileReader = fileReader;
     this.jniWrapper = jniWrapper;
+    this.columnNames = schema.getFields().stream().map(Field::getName).collect(Collectors.toSet());
   }
 
   public int getBatchSize() {
@@ -51,6 +57,10 @@ public class ParquetArrowReaderOptions {
 
   public JniWrapper getJniWrapper() {
     return jniWrapper;
+  }
+
+  public boolean columnExists(String columnName) {
+    return columnNames.contains(columnName);
   }
 
   public static Builder newBuilder() {

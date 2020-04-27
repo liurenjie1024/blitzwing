@@ -13,11 +13,14 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.StringJoiner;
 import org.apache.arrow.memory.BufferAllocator;
 import org.apache.arrow.vector.ipc.ArrowReader;
+import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.Schema;
 import org.apache.parquet.column.ColumnDescriptor;
 import org.apache.parquet.hadoop.ParquetFileReader;
@@ -86,10 +89,14 @@ public class ParquetArrowReader extends ArrowReader implements MemoryManager, It
     return options.getSchema();
   }
 
-  public static RowGroupProto toRowGroupProto(RawChunkStore rawChunkStore) {
+  public RowGroupProto toRowGroupProto(RawChunkStore rawChunkStore) {
     RowGroupProto.Builder rowGroup = RowGroupProto.newBuilder();
 
+
     for (ColumnDescriptor column: rawChunkStore.getColumns()) {
+      if (!options.columnExists(column.getPath()[0])) {
+        continue;
+      }
       ColumnChunkProto.Builder chunkProto = ColumnChunkProto.newBuilder()
           .setColumnName(column.getPath()[0])
           .setNumValues(rawChunkStore.getRowCount());
