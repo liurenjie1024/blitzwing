@@ -8,7 +8,6 @@ import static org.junit.Assert.assertTrue;
 
 import com.ebay.hadoop.blitzwing.vector.RecordBatch;
 import com.google.common.collect.Lists;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,7 +31,7 @@ import org.junit.Test;
 public class ParquetArrowReaderTest {
 
   @Test
-  public void testReadIntoArrow() throws IOException {
+  public void testReadIntoArrow() throws Exception {
     List<Person> personList = new ArrayList<>();
     personList.add(new Person(null, 1, 30000L));
     personList.add(new Person("Amy", null, 40000L));
@@ -109,6 +108,8 @@ public class ParquetArrowReaderTest {
       }
 
       assertEquals(personList.subList(i*3, (i+1)*3), returned);
+
+      recordBatch.close();
     }
 
     assertFalse(arrowReader.hasNext());

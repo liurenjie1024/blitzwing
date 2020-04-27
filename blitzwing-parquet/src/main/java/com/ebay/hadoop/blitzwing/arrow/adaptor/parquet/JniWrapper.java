@@ -1,11 +1,8 @@
 package com.ebay.hadoop.blitzwing.arrow.adaptor.parquet;
 
-import com.ebay.hadoop.blitzwing.exception.BlitzwingException;
 import com.ebay.hadoop.blitzwing.generated.arrow.adaptor.parquet.ParquetProtoOuter.RowGroupProto;
 import com.ebay.hadoop.blitzwing.generated.vector.RecordBatchProto.JniRecordBatchProto;
-import com.ebay.hadoop.blitzwing.utils.JniUtils;
 import com.google.protobuf.InvalidProtocolBufferException;
-import java.io.IOException;
 
 public class JniWrapper implements AutoCloseable {
   private long instanceId;
@@ -14,7 +11,7 @@ public class JniWrapper implements AutoCloseable {
     this.instanceId = instanceId;
   }
 
-  public void setRowGroupData(RowGroupProto rowGroupData) {
+  public synchronized void setRowGroupData(RowGroupProto rowGroupData) {
     byte[] serializedData = rowGroupData.toByteArray();
     setRowGroupData(instanceId, serializedData);
   }
@@ -28,6 +25,7 @@ public class JniWrapper implements AutoCloseable {
   }
 
   public void freeBuffer(long address, int length) {
+    System.out.println("Freeing buffer: " + address + ", " + length);
     freeBuffer(instanceId, address, length);
   }
 

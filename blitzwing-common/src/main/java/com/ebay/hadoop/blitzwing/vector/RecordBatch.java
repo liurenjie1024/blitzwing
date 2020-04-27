@@ -13,7 +13,7 @@ import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.ipc.message.ArrowFieldNode;
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch;
 
-public class RecordBatch {
+public class RecordBatch implements AutoCloseable {
   private final int rowCount;
   private final List<FieldVector> columns;
 
@@ -52,4 +52,25 @@ public class RecordBatch {
   public static RecordBatch from(VectorSchemaRoot vectors) {
     return new RecordBatch(vectors.getRowCount(), vectors.getFieldVectors());
   }
+
+  @Override
+  public void close() throws Exception {
+    Exception ret = null;
+    for (FieldVector v: columns) {
+      try {
+        v.close();
+      } catch (Exception e) {
+        if (ret == null) {
+          ret = e;
+        } else {
+          ret.addSuppressed(e);
+        }
+      }
+    }
+
+    if (ret != null) {
+      throw ret;
+    }
+  }
 }
+
