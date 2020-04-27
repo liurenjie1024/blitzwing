@@ -16,12 +16,12 @@ tasks.register<Copy>("copyNativeToResources") {
 dependencies {
     implementation(project(":blitzwing-common"))
     compileOnly(rootProject.extra["depProtobuf"] as String)
+    implementation(rootProject.extra["depHadoopClient"] as String)
     implementation(rootProject.extra["depParquetHadoop"] as String)
     implementation(rootProject.extra["depParquetColumn"] as String)
     implementation(rootProject.extra["depArrowVector"] as String)
     implementation(rootProject.extra["depArrowMemory"] as String)
     testImplementation(rootProject.extra["depJunit"] as String)
-    testImplementation(rootProject.extra["depHadoopClient"] as String)
     testImplementation(rootProject.extra["depParquetAvro"] as String)
 }
 
