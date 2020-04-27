@@ -1,16 +1,11 @@
 package com.ebay.hadoop.blitzwing.arrow.adaptor.parquet;
 
 import com.ebay.hadoop.blitzwing.vector.RecordBatch;
-import com.google.common.collect.Lists;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.apache.arrow.memory.RootAllocator;
-import org.apache.arrow.vector.BigIntVector;
-import org.apache.arrow.vector.IntVector;
-import org.apache.arrow.vector.VarCharVector;
 import org.apache.arrow.vector.types.Types.MinorType;
 import org.apache.arrow.vector.types.pojo.Field;
 import org.apache.arrow.vector.types.pojo.Schema;
@@ -45,8 +40,9 @@ public class Demo {
       try {
         run(options);
       } catch (Exception e) {
-        System.out.println("It takes " + (System.nanoTime()-current) + "nano seconds"); ;
+        e.printStackTrace();
       }
+      System.out.println("It takes " + (System.nanoTime()-current) + "nano seconds");
     }
   }
 
