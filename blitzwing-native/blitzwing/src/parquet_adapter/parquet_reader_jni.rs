@@ -20,8 +20,8 @@ use std::{
 
 #[no_mangle]
 pub extern "system" fn JNI_OnLoad(_jvm: JavaVM, _reserved: *mut u8) -> jint {
-  let path = "/Users/renliu/Workspace/blitzwing/blitzwing-native/blitzwing/log4rs/hdfs.yaml";
-  log4rs::init_file(path, Default::default()).expect("Log4rs initialization failed!");
+  // let path = "/Users/renliu/Workspace/blitzwing/blitzwing-native/blitzwing/log4rs/hdfs.yaml";
+  // log4rs::init_file(path, Default::default()).expect("Log4rs initialization failed!");
 
   JNI_VERSION_1_8
 }
