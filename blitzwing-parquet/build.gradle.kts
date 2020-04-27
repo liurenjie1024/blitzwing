@@ -1,5 +1,6 @@
 plugins {
     java
+    application
 }
 
 tasks.register<Copy>("copyNativeToResources") {
@@ -34,5 +35,9 @@ java {
     tasks.test {
         testLogging.showStandardStreams = true
     }
+}
+
+application {
+    mainClassName = "com.ebay.hadoop.blitzwing.arrow.adaptor.parquet.Demo"
 }
 
