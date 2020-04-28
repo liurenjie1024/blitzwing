@@ -345,6 +345,6 @@ mod tests {
     };
 
     let parquet_reader = create_parquet_reader(parquet_reader_proto).unwrap();
-    assert_ne!(&schema, parquet_reader.schema.as_ref());
+    assert_eq!(&schema, parquet_reader.schema.as_ref());
   }
 }

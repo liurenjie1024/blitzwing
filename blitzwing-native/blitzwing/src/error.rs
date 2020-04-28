@@ -47,6 +47,10 @@ impl BlitzwingError {
   pub fn kind(&self) -> &BlitzwingErrorKind {
     self.inner.get_context()
   }
+
+  pub fn into_std_io_error(self) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::Other, failure::Error::from(self))
+  }
 }
 
 impl Display for BlitzwingError {

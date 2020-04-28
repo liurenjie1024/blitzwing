@@ -323,14 +323,6 @@ mod tests {
   }
 
   #[test]
-  #[should_panic(expected = "Could not write to Buffer, not big enough")]
-  fn test_write_too_many_bytes() {
-    let mut b = Int32BufferBuilder::with_default_buffer_manager(0).unwrap();
-    let bytes = [8, 16, 32, 64].to_byte_slice();
-    b.write_bytes(bytes, 4).unwrap();
-  }
-
-  #[test]
   fn test_write_bytes() {
     let mut b = BooleanBufferBuilder::with_default_buffer_manager(4)
       .expect("Failed to allocate boolean buffer builder!");

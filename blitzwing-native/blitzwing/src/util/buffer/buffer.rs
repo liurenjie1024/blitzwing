@@ -13,7 +13,7 @@ use std::{
   convert::TryFrom,
   default::Default,
   fmt::{Debug, Formatter},
-  io::{Error as IoError, ErrorKind, Result as IoResult, Write},
+  io::{Result as IoResult, Write},
   mem,
   ptr::null_mut,
   slice::{from_raw_parts, from_raw_parts_mut},
@@ -268,10 +268,11 @@ impl<'a> TryFrom<&'a [u8]> for Buffer {
     // allocate aligned memory buffer
     let len = slice.len() * mem::size_of::<u8>();
     let buffer_manager = BufferManager::default();
-    let buffer = buffer_manager.allocate_aligned(len, false)?;
+    let mut buffer = buffer_manager.allocate_aligned(len, false)?;
     unsafe {
       memory::memcpy(buffer.inner.as_ptr(), slice.as_ptr(), len);
     }
+    buffer.resize(len)?;
     Ok(buffer)
   }
 }
@@ -288,10 +289,9 @@ impl PartialEq for Buffer {
 
 impl Write for Buffer {
   fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
-    let remaining_capacity = self.capacity() - self.len();
-    if buf.len() > remaining_capacity {
-      return Err(IoError::new(ErrorKind::Other, "Buffer not big enough"));
-    }
+    self.reserve(self.len() + buf.len())
+      .map_err(|e| e.into_std_io_error())?;
+
     unsafe {
       memory::memcpy(self.inner.ptr.offset(self.len() as isize), buf.as_ptr(), buf.len());
       self.len += buf.len();
@@ -352,10 +352,6 @@ mod tests {
     let mut buf = Buffer::with_capacity(64, false).expect("Failed to create buffer");
     buf.with_bitset(64, true);
     assert_eq!(512, bit_util::count_set_bits(buf.as_ref()));
-
-    let mut buf = Buffer::with_capacity(64, false).expect("Failed to create buffer");
-    buf.set_null_bits(32, 32);
-    assert_eq!(256, bit_util::count_set_bits(buf.as_ref()));
   }
 
   // #[test]
@@ -458,11 +454,11 @@ mod tests {
     assert_eq!(100, buf.len());
 
     buf.resize(30).expect("resize should be OK");
-    assert_eq!(64, buf.capacity());
+    assert_eq!(128, buf.capacity());
     assert_eq!(30, buf.len());
 
     buf.resize(0).expect("resize should be OK");
-    assert_eq!(0, buf.capacity());
+    assert_eq!(128, buf.capacity());
     assert_eq!(0, buf.len());
   }
 

@@ -18,6 +18,11 @@ tasks.register<Exec>("clean") {
 }
 
 tasks.register<Exec>("test") {
+    // fix for macos
+    val javaHome = environment["JAVA_HOME"]
+    val originalLibraryPath = environment["DYLD_LIBRARY_PATH"]
+
+    environment("DYLD_LIBRARY_PATH", "${javaHome}/jre/lib/server:${originalLibraryPath}")
     val args = mutableListOf("cargo", "test")
     commandLine(*(args.toTypedArray()))
 }

@@ -35,6 +35,7 @@ public class ParquetArrowReader extends ArrowReader implements MemoryManager, It
 
   private boolean eof;
   private RecordBatch lastBatch;
+  private RawChunkStore lastChunkStore;
 
   public ParquetArrowReader(BufferAllocator allocator,
       ParquetArrowReaderOptions options) {
@@ -45,6 +46,7 @@ public class ParquetArrowReader extends ArrowReader implements MemoryManager, It
 
     this.eof = false;
     this.lastBatch = null;
+    this.lastChunkStore = null;
   }
 
   @Override
@@ -55,12 +57,19 @@ public class ParquetArrowReader extends ArrowReader implements MemoryManager, It
       totalLen += jni.next();
 
       if (totalLen < options.getBatchSize()) {
-        RawChunkStore rawChunkStore = fileReader.readNextRawRowGroup();
-        if (rawChunkStore == null) {
+        if (lastChunkStore != null) {
+          try {
+            lastChunkStore.close();
+          } catch (Exception e) {
+            throw new BlitzwingException(e);
+          }
+        }
+        lastChunkStore = fileReader.readNextRawRowGroup();
+        if (lastChunkStore  == null) {
           break;
         }
 
-        jni.setRowGroupData(toRowGroupProto(rawChunkStore));
+        jni.setRowGroupData(toRowGroupProto());
       } else {
         break;
       }
@@ -80,8 +89,17 @@ public class ParquetArrowReader extends ArrowReader implements MemoryManager, It
   }
 
   @Override
-  protected void closeReadSource() throws IOException {
+  protected void closeReadSource() {
     jni.close();
+    if (lastChunkStore != null) {
+      try {
+        lastChunkStore.close();
+      } catch (Exception e) {
+        throw new BlitzwingException(e);
+      } finally {
+        lastChunkStore = null;
+      }
+    }
   }
 
   @Override
@@ -89,7 +107,8 @@ public class ParquetArrowReader extends ArrowReader implements MemoryManager, It
     return options.getSchema();
   }
 
-  public RowGroupProto toRowGroupProto(RawChunkStore rawChunkStore) {
+  public RowGroupProto toRowGroupProto() {
+    RawChunkStore rawChunkStore = lastChunkStore;
     RowGroupProto.Builder rowGroup = RowGroupProto.newBuilder();
 
 

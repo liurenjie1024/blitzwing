@@ -42,7 +42,7 @@ public class Demo {
       } catch (Exception e) {
         e.printStackTrace();
       }
-      System.out.println("It takes " + (System.nanoTime()-current) + "nano seconds");
+      System.out.println("It takes " + (System.nanoTime()-current) + " nano seconds");
     }
   }
 
