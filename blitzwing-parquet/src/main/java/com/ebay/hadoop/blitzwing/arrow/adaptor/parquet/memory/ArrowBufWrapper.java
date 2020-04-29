@@ -13,7 +13,7 @@ public class ArrowBufWrapper implements ToByteBuffer {
 
   @Override
   public ByteBuffer toByteBuffer() {
-    return inner.nioBuffer();
+    return inner.nioBuffer(0, inner.capacity());
   }
 
   ArrowBuf getInner() {
