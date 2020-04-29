@@ -13,7 +13,7 @@ public class ArrowBufManagerTest {
     ToByteBuffer rawBuffer = manager.allocate(10);
     ByteBuffer buffer = rawBuffer.toByteBuffer();
     assertEquals(0, buffer.position());
-    assertEquals(10, buffer.capacity());
+    assertEquals(10, buffer.limit());
     for (int i=0; i<10; i++) {
       buffer.put((byte)i);
     }

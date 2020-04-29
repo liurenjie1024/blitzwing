@@ -62,7 +62,6 @@ public class ParquetArrowReaderTest {
 
     // Read from Parquet file.
     Configuration conf = new Configuration();
-    conf.setInt("parquet.read.allocation.size", 4);
     conf.set("parquet.read.allocation.class", "com.ebay.hadoop.blitzwing.arrow.adaptor.parquet.memory.ArrowBufManager");
     ParquetFileReader parquetFileReader = ParquetFileReader.open(conf, dataFile);
 

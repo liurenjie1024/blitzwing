@@ -9,7 +9,7 @@ public class ArrowBufManager implements BufferAllocator {
 
   @Override
   public ToByteBuffer allocate(int i) {
-    return new ArrowBufWrapper(arrowAllocator.buffer(i));
+    return new ArrowBufWrapper(i, arrowAllocator.buffer(i));
   }
 
   @Override
