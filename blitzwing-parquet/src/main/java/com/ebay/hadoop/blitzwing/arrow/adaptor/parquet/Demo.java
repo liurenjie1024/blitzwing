@@ -15,9 +15,22 @@ import org.apache.parquet.hadoop.ParquetFileReader;
 
 public class Demo {
   public static void main(String[] args) throws Exception {
+
+    for (int i=0; i<100; i++) {
+      long current = System.nanoTime();
+      try {
+        run(args[0]);
+      } catch (Exception e) {
+        e.printStackTrace();
+      }
+      System.out.println("It takes " + (System.nanoTime()-current) + " nano seconds");
+    }
+  }
+
+  private static void run(String filename) throws Exception {
     Configuration conf = new Configuration();
     conf.set("parquet.read.allocation.class", "com.ebay.hadoop.blitzwing.arrow.adaptor.parquet.memory.ArrowBufManager");
-    ParquetFileReader parquetFileReader = ParquetFileReader.open(conf, new Path(args[0]));
+    ParquetFileReader parquetFileReader = ParquetFileReader.open(conf, new Path(filename));
 
     Map<String, MinorType> fields = new HashMap<>();
     fields.put("item_id", MinorType.BIGINT);
@@ -36,19 +49,6 @@ public class Demo {
         .withFileReader(parquetFileReader)
         .withSchema(arrowSchema)
         .build();
-
-    for (int i=0; i<10; i++) {
-      long current = System.nanoTime();
-      try {
-        run(options);
-      } catch (Exception e) {
-        e.printStackTrace();
-      }
-      System.out.println("It takes " + (System.nanoTime()-current) + " nano seconds");
-    }
-  }
-
-  private static void run(ParquetArrowReaderOptions options) throws Exception {
     ParquetArrowReader arrowReader = new ParquetArrowReader(new RootAllocator(), options);
     while (arrowReader.hasNext()) {
       RecordBatch recordBatch = arrowReader.next();
