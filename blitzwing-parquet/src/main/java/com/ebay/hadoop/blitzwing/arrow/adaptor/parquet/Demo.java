@@ -15,7 +15,9 @@ import org.apache.parquet.hadoop.ParquetFileReader;
 
 public class Demo {
   public static void main(String[] args) throws Exception {
-    ParquetFileReader parquetFileReader = ParquetFileReader.open(new Configuration(), new Path(args[0]));
+    Configuration conf = new Configuration();
+    conf.set("parquet.read.allocation.class", "com.ebay.hadoop.blitzwing.arrow.adaptor.parquet.memory.ArrowBufManager");
+    ParquetFileReader parquetFileReader = ParquetFileReader.open(conf, new Path(args[0]));
 
     Map<String, MinorType> fields = new HashMap<>();
     fields.put("item_id", MinorType.BIGINT);
