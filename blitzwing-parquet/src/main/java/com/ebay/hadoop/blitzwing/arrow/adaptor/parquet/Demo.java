@@ -14,7 +14,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.parquet.hadoop.ParquetFileReader;
 
 public class Demo {
-  public static void main(String[] args) throws Exception {
+  public static void main(String[] args) {
 
     for (int i=0; i<100; i++) {
       long current = System.nanoTime();
@@ -36,6 +36,23 @@ public class Demo {
     fields.put("item_id", MinorType.BIGINT);
     fields.put("auct_end_dt", MinorType.INT);
     fields.put("variation_id", MinorType.BIGINT);
+    fields.put("user_id", MinorType.BIGINT);
+    fields.put("watch_site_id", MinorType.INT);
+    fields.put("session_skey", MinorType.BIGINT);
+    fields.put("session_start_dt", MinorType.INT);
+    fields.put("seqnum", MinorType.INT);
+    fields.put("soj_site_id", MinorType.INT);
+    fields.put("cobrand", MinorType.INT);
+    fields.put("source_impr_id", MinorType.BIGINT);
+    fields.put("agent_id", MinorType.BIGINT);
+    fields.put("watch_page_id", MinorType.INT);
+    fields.put("soj_watch_flags64", MinorType.BIGINT);
+    fields.put("has_dw_rec", MinorType.INT);
+    fields.put("bot_ind", MinorType.INT);
+    fields.put("del_session_skey", MinorType.BIGINT);
+    fields.put("del_session_start_dt", MinorType.INT);
+    fields.put("del_seqnum", MinorType.INT);
+    fields.put("del_site_id", MinorType.INT);
 
     List<Field> fieldList = new ArrayList<>(fields.size());
     for (String filedName: fields.keySet()) {
