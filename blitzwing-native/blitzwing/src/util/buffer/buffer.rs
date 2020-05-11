@@ -125,7 +125,7 @@ impl BufferData {
 }
 
 impl Buffer {
-  pub(super) fn with_capacity(capacity: usize, resizable: bool) -> Result<Self> {
+  pub fn with_capacity(capacity: usize, resizable: bool) -> Result<Self> {
     BufferManager::default().allocate_aligned(capacity, resizable)
   }
 
@@ -156,6 +156,73 @@ impl Buffer {
 
   pub(crate) fn is_empty(&self) -> bool {
     self.len() == 0
+  }
+
+  pub fn to_bitmap(&self) -> Result<Buffer> {
+    let mut buffer = self.create_bitmap_buffer()?;
+    self.fill_bitmap_buffer(&mut buffer)?;
+    debug!("Raw buffer: {:?}, bitmap buffer: {:?}", &self, &buffer);
+    Ok(buffer)
+  }
+
+  /// Create this method so that we can test this method in arch without simd
+  pub fn to_bitmap_basic(&self) -> Result<Buffer> {
+    let mut buffer = self.create_bitmap_buffer()?;
+    self.fill_bitmap_buffer_basic(&mut buffer)?;
+    debug!("Raw buffer: {:?}, bitmap buffer: {:?}", &self, &buffer);
+    Ok(buffer)
+  }
+
+  fn create_bitmap_buffer(&self) -> Result<Buffer> {
+    let new_buffer_len = bit_util::ceil(self.len(), 8);
+    let new_buffer_data = self.manager.allocate_aligned(new_buffer_len, false)?;
+    let mut new_buffer = Buffer::new(new_buffer_data, self.manager.clone());
+    new_buffer.resize(new_buffer_len)?;
+    Ok(new_buffer)
+  }
+
+  fn fill_bitmap_buffer_basic(&self, new_buffer: &mut Buffer) -> Result<()> {
+    let buf = AsRef::<[u8]>::as_ref(&self);
+    // clear bits
+    for v in AsMut::<[u8]>::as_mut(new_buffer) {
+      *v = 0;
+    }
+
+    for i in 0..self.len {
+      if buf[i] > 0 {
+        unsafe {
+          bit_util::set_bit_raw(new_buffer.raw_data() as *mut u8, i);
+        }
+      }
+    }
+
+    Ok(())
+  }
+
+  fn fill_bitmap_buffer(&self, new_buffer: &mut Buffer) -> Result<()> {
+    #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+    {
+      use std::arch::x86_64::*;
+      if is_x86_feature_detected!("avx2") {
+        unsafe {
+          let out = new_buffer.raw_data();
+          let mut j = 0isize;
+          for i in (0..self.len).step_by(32) {
+            let start = self.raw_data().offset(i as isize) as *const __m256i;
+            let input = _mm256_load_si256(start);
+            let output = _mm256_movemask_epi8(input);
+            *out.offset(j) = (output & 0xFF) as u8;
+            *out.offset(j + 1) = ((output >> 8) & 0xFF) as u8;
+            *out.offset(j + 2) = ((output >> 16) & 0xFF) as u8;
+            *out.offset(j + 3) = ((output >> 24) & 0xFF) as u8;
+            j = j + 4;
+          }
+          return Ok(());
+        }
+      }
+    }
+
+    self.fill_bitmap_buffer_basic(new_buffer)
   }
 
   pub(crate) unsafe fn to_arrow_buffer(&mut self) -> ArrowBuffer {
@@ -289,8 +356,7 @@ impl PartialEq for Buffer {
 
 impl Write for Buffer {
   fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
-    self.reserve(self.len() + buf.len())
-      .map_err(|e| e.into_std_io_error())?;
+    self.reserve(self.len() + buf.len()).map_err(|e| e.into_std_io_error())?;
 
     unsafe {
       memory::memcpy(self.inner.ptr.offset(self.len() as isize), buf.as_ptr(), buf.len());
@@ -314,6 +380,7 @@ mod tests {
 
   use super::*;
   use arrow::datatypes::ToByteSlice;
+  use rand::prelude::*;
   use std::{convert::TryFrom, sync::Arc};
 
   #[test]
@@ -516,5 +583,29 @@ mod tests {
     check_as_typed_data!(&[1u64, 3u64, 6u64], u64);
     check_as_typed_data!(&[1f32, 3f32, 6f32], f32);
     check_as_typed_data!(&[1f64, 3f64, 6f64], f64);
+  }
+
+  #[test]
+  fn test_to_bitmap() {
+    let bits: Vec<bool> = (0..1000).map(|_i| random()).collect();
+    let bytes: Vec<u8> = bits.iter().map(|v| if *v { 128u8 } else { 0u8 }).collect();
+
+    let buffer = Buffer::try_from(bytes.as_slice()).expect("Failed to build buffer");
+
+    let bitmap = buffer.to_bitmap().expect("Failed to create bitmap");
+    check_bitmap_with_bools(&bitmap, bits.as_slice());
+
+    let bitmap = buffer.to_bitmap_basic().expect("Failed to create bitmap basic");
+    check_bitmap_with_bools(&bitmap, bits.as_slice());
+  }
+
+  fn check_bitmap_with_bools(bitmap: &Buffer, bits: &[bool]) {
+    assert_eq!(bit_util::ceil(bits.len(), 8), bitmap.len());
+
+    let data: &[u8] = bitmap.as_ref();
+
+    for i in 0..bits.len() {
+      assert_eq!(bits[i], bit_util::get_bit(data, i));
+    }
   }
 }

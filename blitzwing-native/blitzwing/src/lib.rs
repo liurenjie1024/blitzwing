@@ -19,4 +19,4 @@ pub mod error;
 pub(crate) mod parquet_adapter;
 pub(crate) mod proto;
 pub(crate) mod types;
-pub(crate) mod util;
+pub mod util;

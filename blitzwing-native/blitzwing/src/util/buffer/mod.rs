@@ -2,8 +2,8 @@ pub(crate) mod buffer;
 pub(crate) mod builder;
 pub(crate) mod manager;
 
-pub(crate) use buffer::{Buffer, BufferData};
-pub(crate) use builder::{BooleanBufferBuilder, BufferBuilder, BufferBuilderTrait};
+pub use buffer::{Buffer, BufferData};
+pub(crate) use builder::{BufferBuilder, BufferBuilderTrait};
 pub(crate) use manager::BufferManager;
 
 use arrow::datatypes::*;

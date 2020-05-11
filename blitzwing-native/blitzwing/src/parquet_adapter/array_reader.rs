@@ -4,8 +4,7 @@ use crate::{
   types::ColumnDescProtoPtr,
   util::{
     buffer::{
-      BooleanBufferBuilder, Buffer, BufferBuilder, BufferBuilderTrait, BufferData, BufferManager,
-      Int32BufferBuilder,
+      Buffer, BufferBuilder, BufferBuilderTrait, BufferData, BufferManager, Int32BufferBuilder,
     },
     num::Cast,
     reader::PageReaderIteratorRef,
@@ -40,7 +39,7 @@ pub(crate) type ArrayReaderRef = Box<dyn ArrayReader>;
 pub struct PrimitiveArrayReader<A, P> {
   arrow_data_buffer: Option<BufferBuilder<A>>,
   data_type: DataType,
-  record_reader: RecordReader<P, Buffer, Buffer>,
+  record_reader: RecordReader<P, Buffer, Buffer, Buffer>,
   buffer_manager: BufferManager,
   // A temporary workaround before new buffer design merged into arrow community
   collected_buffers: Vec<BufferData>,
@@ -60,7 +59,7 @@ where
     page_readers: PageReaderIteratorRef,
     buffer_manager: BufferManager,
   ) -> Result<Self> {
-    let record_reader = RecordReader::<P, Buffer, Buffer>::new(
+    let record_reader = RecordReader::<P, Buffer, Buffer, Buffer>::new(
       batch_size,
       column_desc,
       create_record_reader_buffers::<P, _, Buffer>(batch_size, &buffer_manager, || {
@@ -124,7 +123,7 @@ where
       ArrayDataBuilder::new(A::get_data_type()).len(num_values).null_count(null_count);
 
     if null_count > 0 {
-      let mut null_buffer = buffers.null_bitmap.finish();
+      let mut null_buffer = buffers.null_bitmap.to_bitmap()?;
       self.collected_buffers.push(null_buffer.buffer_data());
       array_data = array_data.null_bit_buffer(unsafe { null_buffer.to_arrow_buffer() });
     }
@@ -165,7 +164,7 @@ where
 {
   // arrow_offset_buffer: Int32BufferBuilder,
   data_type: DataType,
-  record_reader: RecordReader<P, Vec<P::T>, Buffer>,
+  record_reader: RecordReader<P, Vec<P::T>, Buffer, Buffer>,
   buffer_manager: BufferManager,
   batch_size: usize,
   collected_buffers: Vec<BufferData>,
@@ -192,7 +191,7 @@ where
         Ok(buffer)
       })?;
 
-    let record_reader = RecordReader::<P, Vec<P::T>, Buffer>::new(
+    let record_reader = RecordReader::<P, Vec<P::T>, Buffer, Buffer>::new(
       batch_size,
       column_desc,
       record_reader_buffers,
@@ -228,7 +227,7 @@ where
   fn collect(&mut self) -> Result<ArrayRef> {
     let values_read = self.record_reader.get_num_values();
     let null_count = self.record_reader.get_null_count();
-    let mut buffers = self.record_reader.collect_buffers(create_record_reader_buffers::<P, _, _>(
+    let buffers = self.record_reader.collect_buffers(create_record_reader_buffers::<P, _, _>(
       self.batch_size,
       &self.buffer_manager,
       || {
@@ -272,7 +271,7 @@ where
       .add_buffer(unsafe { arrow_data_buffer.to_arrow_buffer() });
 
     if null_count > 0 {
-      let mut null_buffer = buffers.null_bitmap.finish();
+      let mut null_buffer = buffers.null_bitmap.to_bitmap()?;
       self.collected_buffers.push(null_buffer.buffer_data());
       array_data = array_data.null_bit_buffer(unsafe { null_buffer.to_arrow_buffer() });
     }
@@ -294,7 +293,7 @@ fn create_record_reader_buffers<P, F, B>(
   batch_size: usize,
   buffer_manager: &BufferManager,
   func: F,
-) -> Result<RecordReaderBuffers<B, Buffer>>
+) -> Result<RecordReaderBuffers<B, Buffer, Buffer>>
 where
   P: ParquetType,
   F: FnOnce() -> Result<B>,
@@ -302,7 +301,8 @@ where
   let parquet_data_buffer = func()?;
   let mut def_levels = buffer_manager.allocate_aligned(batch_size * size_of::<i16>(), false)?;
   def_levels.resize(batch_size * size_of::<i16>())?;
-  let null_bitmap = BooleanBufferBuilder::new(batch_size, buffer_manager.clone())?;
+  let mut null_bitmap = buffer_manager.allocate_aligned(batch_size, false)?;
+  null_bitmap.resize(batch_size)?;
 
   Ok(RecordReaderBuffers { parquet_data_buffer, def_levels, null_bitmap })
 }

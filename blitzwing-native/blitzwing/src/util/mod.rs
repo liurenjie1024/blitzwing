@@ -1,4 +1,4 @@
-pub(crate) mod buffer;
+pub mod buffer;
 pub(crate) mod jni_util;
 pub(crate) mod num;
 pub(crate) mod reader;

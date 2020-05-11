@@ -4,10 +4,7 @@ use crate::{
     Result,
   },
   types::ColumnDescProtoPtr,
-  util::{
-    buffer::{BooleanBufferBuilder, BufferBuilderTrait},
-    reader::{PageReaderIteratorRef, PageReaderRef},
-  },
+  util::reader::{PageReaderIteratorRef, PageReaderRef},
 };
 use failure::ResultExt;
 use parquet::{
@@ -20,19 +17,19 @@ use parquet::{
 };
 use std::{cmp::min, collections::HashMap, marker::PhantomData, mem::replace};
 
-pub(crate) struct RecordReaderBuffers<P, D> {
+pub(crate) struct RecordReaderBuffers<P, D, B> {
   pub(super) parquet_data_buffer: P,
   pub(super) def_levels: D,
-  pub(super) null_bitmap: BooleanBufferBuilder,
+  pub(super) null_bitmap: B,
 }
 
-pub struct RecordReader<T, B, D> {
+pub struct RecordReader<T, P, D, B> {
   batch_size: usize,
   column_desc: ColumnDescProtoPtr,
 
   num_values: usize,
   num_nulls: usize,
-  buffers: RecordReaderBuffers<B, D>,
+  buffers: RecordReaderBuffers<P, D, B>,
 
   page_readers: PageReaderIteratorRef,
   cur_page_reader: Option<PageReaderRef>,
@@ -52,24 +49,35 @@ pub struct RecordReader<T, B, D> {
   phantom_data: PhantomData<T>,
 }
 
-impl<T, B, D> RecordReader<T, B, D>
+impl<T, P, D, B> RecordReader<T, P, D, B>
 where
   T: ParquetType,
-  B: AsMut<[T::T]>,
+  P: AsMut<[T::T]>,
   D: AsMut<[i16]>,
+  B: AsMut<[u8]>,
 {
   pub(crate) fn new(
     batch_size: usize,
     column_desc: ColumnDescProtoPtr,
-    mut buffers: RecordReaderBuffers<B, D>,
+    mut buffers: RecordReaderBuffers<P, D, B>,
     page_readers: PageReaderIteratorRef,
   ) -> Result<Self> {
-    if column_desc.get_max_def_level() > 0 && buffers.def_levels.as_mut().len() != batch_size {
-      return Err(InvalidArgumentError(format!(
-        "Def level buffer size({}) not match batch size({})",
-        buffers.def_levels.as_mut().len(),
-        batch_size
-      )))?;
+    if column_desc.get_max_def_level() > 0 {
+      if buffers.def_levels.as_mut().len() != batch_size {
+        return Err(InvalidArgumentError(format!(
+          "Def level buffer size({}) not match batch size({})",
+          buffers.def_levels.as_mut().len(),
+          batch_size
+        )))?;
+      }
+
+      if buffers.null_bitmap.as_mut().len() != batch_size {
+        return Err(InvalidArgumentError(format!(
+          "Bitmap buffer size({}) not match batch size({})",
+          buffers.null_bitmap.as_mut().len(),
+          batch_size
+        )))?;
+      }
     }
 
     Ok(Self {
@@ -113,11 +121,13 @@ where
           }
 
           let is_empty = self.buffers.def_levels.as_mut()[cur_idx] < self.max_def_level();
-
+          let null_byte = if is_empty { 0u8 } else { 128u8 };
+          self.buffers.null_bitmap.as_mut()[cur_idx] = null_byte;
           let mut end_idx_tmp = cur_idx + 1;
           while end_idx_tmp < end_idx
             && ((self.buffers.def_levels.as_mut()[end_idx_tmp] < self.max_def_level()) == is_empty)
           {
+            self.buffers.null_bitmap.as_mut()[end_idx_tmp] = null_byte;
             end_idx_tmp += 1;
           }
 
@@ -125,10 +135,6 @@ where
             self.read_values(cur_idx, end_idx_tmp)?;
           } else {
             iter_num_nulls += end_idx_tmp - cur_idx;
-          }
-
-          for _ in cur_idx..end_idx_tmp {
-            self.buffers.null_bitmap.append(!is_empty)?;
           }
 
           cur_idx = end_idx_tmp;
@@ -157,8 +163,8 @@ where
 
   pub(crate) fn collect_buffers(
     &mut self,
-    new_buffer: RecordReaderBuffers<B, D>,
-  ) -> RecordReaderBuffers<B, D> {
+    new_buffer: RecordReaderBuffers<P, D, B>,
+  ) -> RecordReaderBuffers<P, D, B> {
     self.num_values = 0;
     self.num_nulls = 0;
 
@@ -326,7 +332,7 @@ where
     let current_decoder = self
       .decoders
       .get_mut(&encoding)
-      .expect(format!("decoder for encoding {} should be set", encoding).as_str());
+      .expect("decoder for encoding should be set");
 
     let buffer = &mut self.buffers.parquet_data_buffer.as_mut()[start..end];
 
