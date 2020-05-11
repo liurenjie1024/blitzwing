@@ -160,11 +160,13 @@ impl BufferBuilderTrait for BooleanBufferBuilder {
   /// Appends a value into the builder, growing the internal buffer as needed.
   fn append(&mut self, v: bool) -> Result<()> {
     self.reserve(1)?;
-    if v {
-      self.buffer.write(&[1u8]).context(IoError)?;
+    let buf = if v {
+      &[1u8]
     } else {
-      self.buffer.write(&[0u8]).context(IoError)?;
-    }
+      &[0u8]
+    };
+
+    self.buffer.write(buf).expect("Should not happen!");
     self.len += 1;
     Ok(())
   }
