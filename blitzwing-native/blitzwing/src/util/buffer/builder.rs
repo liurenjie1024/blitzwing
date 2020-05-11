@@ -26,6 +26,7 @@ use crate::{
 };
 use arrow::{
   datatypes::{ArrowNumericType, ToByteSlice},
+  util::bit_util,
 };
 use failure::ResultExt;
 use std::{io::Write, mem};
@@ -146,12 +147,12 @@ impl BufferBuilderTrait for BooleanBufferBuilder {
 
   /// Returns the current capacity of the builder (number of elements)
   fn capacity(&self) -> usize {
-    self.buffer.capacity()
+    self.buffer.capacity() * 8
   }
 
   // Advances the `len` of the underlying `Buffer` by `i` slots of type T
   fn advance(&mut self, i: usize) -> Result<()> {
-    let new_buffer_len = self.len + i;
+    let new_buffer_len = bit_util::ceil(self.len + i, 8);
     self.buffer.resize(new_buffer_len)?;
     self.len += i;
     Ok(())
@@ -160,13 +161,13 @@ impl BufferBuilderTrait for BooleanBufferBuilder {
   /// Appends a value into the builder, growing the internal buffer as needed.
   fn append(&mut self, v: bool) -> Result<()> {
     self.reserve(1)?;
-    let buf = if v {
-      &[1u8]
-    } else {
-      &[0u8]
-    };
-
-    self.buffer.write(buf).expect("Should not happen!");
+    if v {
+      // For performance the `len` of the buffer is not updated on each append but
+      // is updated in the `freeze` method instead.
+      unsafe {
+        bit_util::set_bit_raw(self.buffer.raw_data() as *mut u8, self.len);
+      }
+    }
     self.len += 1;
     Ok(())
   }
@@ -176,12 +177,15 @@ impl BufferBuilderTrait for BooleanBufferBuilder {
     self.reserve(slice.len())?;
     for v in slice {
       if *v {
-        self.buffer.write(&[1u8]).context(IoError)?;
-      } else {
-        self.buffer.write(&[0u8]).context(IoError)?;
+        // For performance the `len` of the buffer is not
+        // updated on each append but is updated in the
+        // `freeze` method instead.
+        unsafe {
+          bit_util::set_bit_raw(self.buffer.raw_data() as *mut u8, self.len);
+        }
       }
+      self.len += 1;
     }
-    self.len += slice.len();
     Ok(())
   }
 
@@ -189,7 +193,10 @@ impl BufferBuilderTrait for BooleanBufferBuilder {
   fn reserve(&mut self, n: usize) -> Result<()> {
     let new_capacity = self.len + n;
     if new_capacity > self.capacity() {
-      self.buffer.reserve(new_capacity)?;
+      let new_byte_capacity = bit_util::ceil(new_capacity, 8);
+      let existing_capacity = self.buffer.capacity();
+      let new_capacity = self.buffer.reserve(new_byte_capacity)?;
+      self.buffer.set_null_bits(existing_capacity, new_capacity - existing_capacity);
     }
     Ok(())
   }
@@ -197,7 +204,12 @@ impl BufferBuilderTrait for BooleanBufferBuilder {
   /// Reset this builder and returns an immutable `Buffer`.
   fn finish(&mut self) -> Buffer {
     // `append` does not update the buffer's `len` so do it before `freeze` is called.
-    std::mem::replace(&mut self.buffer, Buffer::default())
+    let new_buffer_len = bit_util::ceil(self.len, 8);
+    debug_assert!(new_buffer_len >= self.buffer.len());
+    let mut buf = std::mem::replace(&mut self.buffer, Buffer::default());
+    self.len = 0;
+    buf.resize(new_buffer_len).unwrap();
+    buf
   }
 }
 
@@ -310,7 +322,7 @@ mod tests {
     assert_eq!(16, buffer.len());
   }
 
-  // #[test]
+  #[test]
   fn test_write_bytes() {
     let mut b = BooleanBufferBuilder::with_default_buffer_manager(4)
       .expect("Failed to allocate boolean buffer builder!");
@@ -332,7 +344,7 @@ mod tests {
     assert_eq!(1, buffer.len());
   }
 
-  // #[test]
+  #[test]
   fn test_boolean_builder_increases_buffer_len() {
     // 00000010 01001000
     let buf =
