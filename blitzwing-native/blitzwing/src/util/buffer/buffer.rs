@@ -267,7 +267,7 @@ impl Buffer {
     if capacity > self.capacity() {
       let new_capacity = bit_util::round_upto_multiple_of_64(capacity);
       let new_capacity = cmp::max(new_capacity, self.capacity() * 2);
-      let new_data = memory::reallocate(self.inner.ptr, self.capacity(), new_capacity);
+      let new_data = unsafe { memory::reallocate(self.inner.ptr, self.capacity(), new_capacity) };
       if !new_data.is_null() {
         self.inner.ptr = new_data;
         self.inner.capacity = new_capacity;

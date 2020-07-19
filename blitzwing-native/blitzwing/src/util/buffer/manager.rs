@@ -72,7 +72,7 @@ pub trait Manager {
   fn reallocate(&self, buffer: &BufferData, capacity: usize) -> Result<BufferData> {
     let new_capacity = bit_util::round_upto_multiple_of_64(capacity);
     let new_capacity = cmp::max(new_capacity, buffer.capacity() * 2);
-    let new_data = memory::reallocate(buffer.as_ptr(), buffer.capacity(), new_capacity);
+    let new_data = unsafe { memory::reallocate(buffer.as_ptr(), buffer.capacity(), new_capacity) };
     if !new_data.is_null() {
       let new_spec = unsafe {
         BufferSpec::new(
@@ -91,7 +91,7 @@ pub trait Manager {
   fn deallocate(&self, buffer: &BufferData) -> Result<()> {
     let ptr = buffer.as_ptr();
     if !ptr.is_null() {
-      memory::free_aligned(ptr, buffer.capacity());
+      unsafe { memory::free_aligned(ptr, buffer.capacity()) };
     }
 
     Ok(())

@@ -10,9 +10,9 @@ edition = "2018"
 jni = {version = "0.14.0", features = ["invocation"] }
 #arrow = "0.15.1"
 #parquet = "0.15.1"
-parquet = { path = "../../arrow/rust/parquet" }
-arrow = { path = "../../arrow/rust/arrow" }
-protobuf = "2.8.0"
+parquet = { path = "../../../arrow/rust/parquet" }
+arrow = { path = "../../../arrow/rust/arrow" }
+protobuf = "2.8.*"
 failure = "0.1.6"
 failure_derive = "0.1.6"
 
